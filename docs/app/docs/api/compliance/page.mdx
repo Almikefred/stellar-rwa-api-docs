@@ -63,6 +63,28 @@ curl $API_BASE_URL/v1/assets/1/compliance
 }
 ```
 
+**Field selection**
+
+Use the `fields` query parameter to return only the summary fields you need
+(see [Field Selection](/docs/api/field-selection)):
+
+```bash
+curl "$API_BASE_URL/v1/assets/1/compliance?fields=total_records,approved,jurisdictions"
+```
+
+```json
+{
+  "total_records": 1,
+  "approved": 1,
+  "jurisdictions": [
+    { "jurisdiction": "US", "count": 1 }
+  ]
+}
+```
+
+An unknown field name returns `400` with
+`{ "error": "invalid_parameter", … }` naming the offending field.
+
 **Errors**
 
 Returns `404` with `{ "error": "not_found", … }` when the asset id is unknown.
