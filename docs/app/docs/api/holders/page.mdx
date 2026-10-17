@@ -63,9 +63,18 @@ curl $API_BASE_URL/v1/assets/1/holders
 
 **Errors**
 
-Returns `404` with `{ "error": "not_found", … }` when the asset id is unknown. An
-asset with holders but none currently holding a positive balance returns an empty
-array `[]`.
+Returns `404` when the asset id is unknown:
+
+```json
+{
+  "error": "not_found",
+  "message": "asset not found"
+}
+```
+
+An asset with holders but none currently holding a positive balance returns an
+empty array `[]`. See <a href="/docs/api/errors">Errors</a> for the canonical
+error body shape shared by all endpoints.
 
 <CalloutBox variant="tip" title="Balance conversion example">
 Holder balances are raw integers on-chain. To format a balance for end users, query the asset's `decimals` value and scale the integer:

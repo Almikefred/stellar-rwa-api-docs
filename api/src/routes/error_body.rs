@@ -164,4 +164,42 @@ mod tests {
         let response = get(&app, "/metrics", "GET").await;
         assert_error_shape(response, StatusCode::UNAUTHORIZED, "unauthorized").await;
     }
+
+    #[tokio::test]
+    async fn malformed_query_parameters_use_shared_shape() {
+        let app = router(AppState::for_test_empty());
+        // Each of these is rejected by query validation (or the router's
+        // query-string rejection) and must surface as a clear 4xx in the
+        // shared error body, never a 500 or a panic.
+        let cases = [
+            "/v1/assets?limit=abc",
+            "/v1/assets?limit=999999",
+            "/v1/assets?offset=-1",
+            "/v1/holders/abc/position",
+        ];
+        for uri in cases {
+            let response = get(&app, uri, "GET").await;
+            let status = response.status();
+            assert!(
+                status.is_client_error(),
+                "{uri} returned {status}, expected a 4xx"
+            );
+            assert_ne!(status, StatusCode::INTERNAL_SERVER_ERROR, "{uri}");
+            let content_type = response.headers().get(header::CONTENT_TYPE).unwrap();
+            assert!(
+                content_type.to_str().unwrap().starts_with("application/json"),
+                "{uri} did not return JSON"
+            );
+            let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(
+                value.as_object().unwrap().len(),
+                2,
+                "{uri} body was not exactly error+message"
+            );
+            let body: ApiErrorBody = serde_json::from_value(value).unwrap();
+            assert!(!body.error.is_empty(), "{uri} had an empty error code");
+            assert!(!body.message.is_empty(), "{uri} had an empty message");
+        }
+    }
 }

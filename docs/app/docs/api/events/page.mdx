@@ -79,6 +79,25 @@ const displayAmount = Number(rawAmount) / (10 ** 2);
 // => 1.00 token
 ```
 </CalloutBox>
+
+## Errors
+
+Every error response uses the shared two-field body shape:
+
+```json
+{
+  "error": "invalid_limit",
+  "message": "limit must be between 1 and 100"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `error` | string | Stable, machine-readable error code |
+| `message` | string | Human-readable description of the problem |
+
+See [Errors](/docs/api/errors) for the canonical error shape, the full list of codes, and the HTTP status codes each one maps to.
+
 ## What to read next
 
 - [API Overview](/docs/api/overview) — conventions, caching, and the full endpoint list.

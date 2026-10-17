@@ -18,10 +18,16 @@ curl "$API_BASE_URL/v1/assets?fields=id,symbol,valuation_usd"
 curl "$API_BASE_URL/v1/assets/1/holders?fields=address,balance"
 ```
 
-Requesting a field that does not exist returns `400`:
+Requesting a field that does not exist returns `400` with the shared error body
+(see [Errors](/docs/api/errors) for the canonical shape):
 
 ```json
-{"error": "invalid_parameter", "message": "unknown field `nope`; available fields: ..."}
+{
+  "error": {
+    "code": "bad_request",
+    "message": "unknown field `nope`; available fields: ..."
+  }
+}
 ```
 
 Fields are validated against the first record of a list, so an empty list is

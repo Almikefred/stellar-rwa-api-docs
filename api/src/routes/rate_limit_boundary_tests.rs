@@ -65,6 +65,48 @@ async fn throttled_response_has_status_and_a_non_empty_body() {
 }
 
 #[tokio::test]
+async fn holder_position_is_throttled_at_the_burst_boundary_with_shared_error_body() {
+    let burst = 2;
+    let app = router_with_limits(1, burst);
+    let uri = "/v1/holders/So11111111111111111111111111111111111111112/position";
+
+    for n in 1..=burst {
+        let response = get_from(&app, [10, 0, 0, 5], uri).await;
+        assert_ne!(
+            response.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "request {n} within burst must not be throttled"
+        );
+    }
+
+    let throttled = get_from(&app, [10, 0, 0, 5], uri).await;
+    assert_eq!(throttled.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    let content_type = throttled
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    assert!(
+        content_type.starts_with("application/json"),
+        "429 body is JSON, got {content_type:?}"
+    );
+
+    let body = to_bytes(throttled.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let object = json.as_object().expect("429 body is a JSON object");
+    let mut keys: Vec<&str> = object.keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    assert_eq!(keys, ["error", "message"], "429 body has the shared shape");
+    assert_eq!(object["error"], "too_many_requests");
+    assert!(
+        object["message"].as_str().is_some_and(|m| !m.is_empty()),
+        "429 body carries a non-empty message"
+    );
+}
+
+#[tokio::test]
 async fn limit_is_tracked_per_client_ip() {
     let app = router_with_limits(1, 1);
 

@@ -22,16 +22,18 @@ and can be changed with `RWA_RATE_LIMIT_PER_SECOND` and `RWA_RATE_LIMIT_BURST`.
 ### When the limit is exceeded
 
 When a request arrives before a token is available, the API responds with HTTP
-`429 Too Many Requests`. The default middleware response is plain text, not the
-API's JSON error format:
+`429 Too Many Requests` using the shared JSON error body (see
+[API · Errors](/docs/api/errors) for the canonical shape):
 
-```
-HTTP/1.1 429 Too Many Requests
-Too Many Requests! Wait for <seconds>s
+```json
+{
+  "error": "too_many_requests",
+  "message": "Too Many Requests! Wait for <seconds>s"
+}
 ```
 
-The number of seconds varies with the time until the next token is available.
-`Retry-After` is sent on `429` and is exposed to browser clients via
+The number of seconds in the message varies with the time until the next token
+is available. `Retry-After` is sent on `429` and is exposed to browser clients via
 `Access-Control-Expose-Headers` (see [Browser clients](#browser-clients-exposed-cors-headers)),
 but no `X-RateLimit-*` headers are sent. On `429`, pause for at least the
 indicated number of seconds when present, with a minimum one-second delay.
