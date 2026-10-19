@@ -164,4 +164,31 @@ mod tests {
         let response = get(&app, "/metrics", "GET").await;
         assert_error_shape(response, StatusCode::UNAUTHORIZED, "unauthorized").await;
     }
+
+    #[tokio::test]
+    async fn rate_limiter_boundary_uses_shared_shape() {
+        // Drive the server entrypoint's router to the configured rate-limit
+        // boundary: requests up to the limit succeed, the next one is a 429
+        // whose body matches the shared error shape (and keeps Retry-After).
+        let app = router(AppState::for_test_empty());
+        let limit = crate::rate_limit::configured_limit();
+        assert!(limit > 0, "rate limit must be positive to test a boundary");
+
+        for _ in 0..limit {
+            let response = get(&app, "/v1/stats", "GET").await;
+            assert_ne!(
+                response.status(),
+                StatusCode::TOO_MANY_REQUESTS,
+                "request within the limit must not be throttled"
+            );
+        }
+
+        let response = get(&app, "/v1/stats", "GET").await;
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(
+            response.headers().get(header::RETRY_AFTER).is_some(),
+            "429 must advertise Retry-After"
+        );
+        assert_error_shape(response, StatusCode::TOO_MANY_REQUESTS, "too_many_requests").await;
+    }
 }

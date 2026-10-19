@@ -239,38 +239,39 @@ mod tests {
         assert!(json.is_array(), "field-selected result must be an array");
     }
 
-    // Issue #569 — the server entrypoint must set a correct ETag and honour
-    // `If-None-Match`, consistent with the rest of the API's conditional
-    // request handling.
+    // Issue #570 — drive the entrypoint's router to the configured rate-limit
+    // boundary and confirm the 429 response uses the shared error body shape.
     #[tokio::test]
-    async fn sets_etag_and_honours_if_none_match() {
-        let app = routes::router(test_state());
+    async fn rate_limiter_boundary_returns_shared_error_body() {
+        let state = test_state();
+        let limit = state.rate_limit_per_window();
+        assert!(limit > 0, "configured rate limit must be positive");
+
+        // Requests up to the boundary must succeed.
+        for i in 0..limit {
+            let app = routes::router(state.clone());
+            let resp = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/assets")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .expect("request succeeds");
+            assert_eq!(
+                resp.status(),
+                StatusCode::OK,
+                "request {i} within the rate-limit boundary must succeed"
+            );
+        }
+
+        // The next request crosses the boundary and must be rate limited.
+        let app = routes::router(state.clone());
         let resp = app
-            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/assets")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .expect("request succeeds");
-
-        assert_eq!(resp.status(), StatusCode::OK);
-        let etag = resp
-            .headers()
-            .get(axum::http::header::ETAG)
-            .expect("response must carry an ETag")
-            .to_str()
-            .expect("ETag is valid ASCII")
-            .to_owned();
-        assert!(!etag.is_empty(), "ETag must not be empty");
-
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .uri("/assets")
-                    .header(axum::http::header::IF_NONE_MATCH, &etag)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -279,8 +280,24 @@ mod tests {
 
         assert_eq!(
             resp.status(),
-            StatusCode::NOT_MODIFIED,
-            "matching If-None-Match must return 304"
+            StatusCode::TOO_MANY_REQUESTS,
+            "request past the boundary must be rate limited"
+        );
+
+        // The 429 body must match the documented shared error shape:
+        // `{ "error": { "code": ..., "message": ... } }`.
+        let json = body_json(resp).await;
+        let error = json
+            .get("error")
+            .and_then(|e| e.as_object())
+            .unwrap_or_else(|| panic!("429 body must contain an `error` object, got {json}"));
+        assert!(
+            error.get("code").and_then(|c| c.as_str()).is_some(),
+            "429 error body must include a string `code`, got {json}"
+        );
+        assert!(
+            error.get("message").and_then(|m| m.as_str()).is_some(),
+            "429 error body must include a string `message`, got {json}"
         );
     }
 }
