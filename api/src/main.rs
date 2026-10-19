@@ -144,3 +144,121 @@ fn init_tracing() {
         .with(fmt::layer())
         .init();
 }
+
+#[cfg(test)]
+mod tests {
+    //! Issue #567 — the server entrypoint must return a well-formed empty
+    //! array/object (never `null`, never an error) when nothing matches.
+    //!
+    //! These tests exercise the same router the entrypoint serves, so they
+    //! cover the cross-cutting layers added after the routes themselves:
+    //! field selection (`?fields=`), conditional requests (`If-None-Match`),
+    //! and the shared error body shape.
+
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use http_body_util::BodyExt;
+    use metrics_exporter_prometheus::PrometheusBuilder;
+    use stellar_rwa_api::indexer::AppState;
+    use stellar_rwa_api::routes;
+    use tower::ServiceExt;
+
+    fn test_state() -> AppState {
+        let metrics_handle = PrometheusBuilder::new()
+            .build_recorder()
+            .handle();
+        AppState::new(stellar_rwa_api::indexer::Config::for_test(), metrics_handle)
+    }
+
+    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
+        let bytes = resp
+            .into_body()
+            .collect()
+            .await
+            .expect("read body")
+            .to_bytes();
+        serde_json::from_slice(&bytes).expect("body is valid JSON")
+    }
+
+    #[tokio::test]
+    async fn empty_collection_returns_well_formed_array() {
+        let app = routes::router(test_state());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/assets")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert!(json.is_array(), "empty result must be an array, got {json}");
+        assert_eq!(json.as_array().unwrap().len(), 0);
+        assert!(!json.is_null(), "empty result must not be null");
+    }
+
+    #[tokio::test]
+    async fn empty_collection_respects_field_selection() {
+        let app = routes::router(test_state());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/assets?fields=id")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert!(json.is_array(), "field-selected empty result must be an array");
+        assert_eq!(json.as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn empty_collection_conditional_request_is_not_an_error() {
+        let app = routes::router(test_state());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/assets")
+                    .header("If-None-Match", "\"does-not-match\"")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request succeeds");
+
+        // A non-matching validator must not turn an empty result into an
+        // error; the server returns the (empty) representation normally.
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert!(json.is_array());
+        assert_eq!(json.as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn empty_single_resource_returns_well_formed_object_or_not_found() {
+        let app = routes::router(test_state());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/assets/does-not-exist")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request succeeds");
+
+        // A missing single resource is a 404 with the shared error body —
+        // never a `null` payload and never a 5xx.
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        let json = body_json(resp).await;
+        assert!(json.is_object(), "error body must be an object, got {json}");
+        assert!(!json.is_null());
+    }
+}
