@@ -126,3 +126,25 @@ pub(crate) async fn assert_json_array(response: Response) -> Vec<serde_json::Val
         .expect("response body was not a JSON array")
         .clone()
 }
+
+/// Assert `response` is a successful (200) JSON object and return the parsed
+/// object so callers can inspect its keys.
+///
+/// Used by the assets route field-selection tests to confirm that only the
+/// requested fields are present in the response shape.
+pub(crate) async fn assert_json_object(response: Response) -> serde_json::Map<String, serde_json::Value> {
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "expected 200 OK, got {}",
+        response.status()
+    );
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("failed to read response body");
+    let json: serde_json::Value =
+        serde_json::from_slice(&bytes).expect("response body was not valid JSON");
+    json.as_object()
+        .expect("response body was not a JSON object")
+        .clone()
+}
