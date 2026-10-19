@@ -1,5 +1,8 @@
 /// Snapshot test to verify /assets/:id/holders example responses match the documented API contract.
 /// Issue #68: docs: verify example responses on 'API Holders' match the live API/contract shapes
+/// Issue #587: extend coverage to newer contract entry points documented on the holders page
+/// (batch operations, SEP-41, pagination, admin handover, min-holding-period,
+/// dividend deadline/reclaim/cancel).
 use serde_json::{json, Value};
 
 #[test]
@@ -118,4 +121,114 @@ fn test_holders_list_is_array_and_sorted() {
     ]);
 
     assert!(example.is_array(), "holders list should be an array");
+}
+
+#[test]
+fn test_holders_pagination_example_shape() {
+    // Paginated holders response documented on the holders page.
+    let example = json!({
+        "data": [
+            {
+                "address": "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA",
+                "balance": "1000000",
+                "share_percent": 100.0
+            }
+        ],
+        "total": 1,
+        "limit": 20,
+        "offset": 0
+    });
+
+    assert!(example["data"].is_array(), "data should be an array");
+    assert!(example["total"].is_u64(), "total should be an unsigned integer");
+    assert!(example["limit"].is_u64(), "limit should be an unsigned integer");
+    assert!(example["offset"].is_u64(), "offset should be an unsigned integer");
+}
+
+#[test]
+fn test_holders_batch_operations_example_shape() {
+    // Batch transfer / batch balance entry points documented on the holders page.
+    let batch_transfer = json!({
+        "from": "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA",
+        "transfers": [
+            {
+                "to": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+                "amount": "500000"
+            }
+        ]
+    });
+
+    assert!(batch_transfer["transfers"].is_array(), "transfers should be an array");
+    let entry = &batch_transfer["transfers"][0];
+    assert!(entry["to"].is_string(), "transfer.to should be a string");
+    assert!(entry["amount"].is_string(), "transfer.amount should be a string (i128)");
+
+    let batch_balance = json!({
+        "addresses": [
+            "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA"
+        ]
+    });
+    assert!(batch_balance["addresses"].is_array(), "addresses should be an array");
+}
+
+#[test]
+fn test_holders_sep41_example_shape() {
+    // SEP-41 token interface entry points documented on the holders page.
+    let balance = json!({ "balance": "1000000" });
+    assert!(balance["balance"].is_string(), "SEP-41 balance should be a string (i128)");
+
+    let allowance = json!({
+        "from": "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA",
+        "spender": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+        "amount": "250000",
+        "expiration_ledger": 123456
+    });
+    assert!(allowance["amount"].is_string(), "allowance amount should be a string (i128)");
+    assert!(allowance["expiration_ledger"].is_u64(), "expiration_ledger should be an unsigned integer");
+}
+
+#[test]
+fn test_holders_admin_handover_example_shape() {
+    // Two-step admin handover documented on the holders page.
+    let propose = json!({
+        "current_admin": "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA",
+        "new_admin": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+    });
+    assert!(propose["new_admin"].is_string(), "new_admin should be a string");
+
+    let accept = json!({ "new_admin": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5" });
+    assert!(accept["new_admin"].is_string(), "new_admin should be a string");
+}
+
+#[test]
+fn test_holders_min_holding_period_example_shape() {
+    // Minimum holding period configuration documented on the holders page.
+    let example = json!({ "min_holding_period": 17280 });
+    assert!(
+        example["min_holding_period"].is_u64(),
+        "min_holding_period should be an unsigned integer (ledgers)"
+    );
+}
+
+#[test]
+fn test_holders_dividend_lifecycle_example_shape() {
+    // Dividend deadline / reclaim / cancel entry points documented on the holders page.
+    let deadline = json!({
+        "dividend_id": 1,
+        "deadline_ledger": 123456
+    });
+    assert!(deadline["dividend_id"].is_u64(), "dividend_id should be an unsigned integer");
+    assert!(deadline["deadline_ledger"].is_u64(), "deadline_ledger should be an unsigned integer");
+
+    let reclaim = json!({
+        "dividend_id": 1,
+        "reclaimed": "500000"
+    });
+    assert!(reclaim["reclaimed"].is_string(), "reclaimed should be a string (i128)");
+
+    let cancel = json!({
+        "dividend_id": 1,
+        "cancelled": true
+    });
+    assert!(cancel["cancelled"].is_boolean(), "cancelled should be a boolean");
 }

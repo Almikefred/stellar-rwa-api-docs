@@ -31,41 +31,61 @@ the indexer derives this from the allowlist intersected with balances.
 |------|------|-------|
 | `offset` | integer | Skip the first N holders. Default: `0`. |
 | `limit` | integer | Page size. Default: `50`; maximum: `100`. |
+| `cursor` | string | Opaque cursor for keyset pagination. When provided, `offset` is ignored. |
 
 **Response schema** (`Holder`, per holder):
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `address` | string | Holder account |
-| `balance` | string | Balance in **base units** (`i128` string in the asset token's `decimals` base). Divide by `10 ** decimals` (from the asset's metadata) to get the display balance. |
-| `share_percent` | number | Share of total token supply, 0–100 with 2 decimal places (`balance / total_supply * 100`). |
 | Field | Type | Unit | Nullable | Description |
 |-------|------|------|----------|-------------|
 | `address` | string | — | No | Holder account address |
 | `balance` | string | Asset-token base units | No | Exact balance (`i128` serialized as a decimal string) |
 | `share_percent` | number | Percent | No | Share of total supply, 0–100 |
+| `holding_since` | number \| null | Ledger | Yes | Ledger at which the current balance became positive; `null` if unknown |
+| `lockup_until` | number \| null | Ledger | Yes | Ledger until which the balance is locked by the min-holding-period rule; `null` if not locked |
+
+**Pagination envelope**
+
+When `cursor` or `limit` is supplied the response is wrapped:
+
+```json
+{
+  "data": [ /* Holder objects */ ],
+  "next_cursor": "eyJvZmZzZXQiOjUwfQ==",
+  "has_more": true
+}
+```
+
+`next_cursor` is `null` on the last page. Without pagination parameters the
+endpoint returns a bare array for backwards compatibility.
 
 **Example**
 
 ```bash
-curl $API_BASE_URL/v1/assets/1/holders
+curl "$API_BASE_URL/v1/assets/1/holders?limit=50"
 ```
 
 ```json
-[
-  {
-    "address": "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA",
-    "balance": "1000000",
-    "share_percent": 100.0
-  }
-]
+{
+  "data": [
+    {
+      "address": "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA",
+      "balance": "1000000",
+      "share_percent": 100.0,
+      "holding_since": 1234567,
+      "lockup_until": null
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
+}
 ```
 
 **Errors**
 
 Returns `404` with `{ "error": "not_found", … }` when the asset id is unknown. An
 asset with holders but none currently holding a positive balance returns an empty
-array `[]`.
+array `[]` (or `{ "data": [], "next_cursor": null, "has_more": false }` when
+paginated).
 
 <CalloutBox variant="tip" title="Balance conversion example">
 Holder balances are raw integers on-chain. To format a balance for end users, query the asset's `decimals` value and scale the integer:
@@ -142,3 +162,46 @@ expired at the latest indexed ledger, and jurisdiction not blocked. For
 security-critical pre-transfer checks, call the compliance contract's
 `is_allowed` entry point directly rather than relying solely on this field.
 </CalloutBox>
+
+---
+
+## Contract entry points affecting holders
+
+The holders endpoints above are derived from the asset-token and compliance
+contracts. The following entry points change holder state and are reflected in
+the indexer within one refresh cycle (≈10 s). Use them when you need to reason
+about why a holder appears, disappears, or is locked.
+
+### Batch operations
+
+`batch_transfer`, `batch_mint`, and `batch_burn` accept parallel arrays of
+`(from, to, amount)` / `(to, amount)` / `(from, amount)` and apply them
+atomically. A holder's `balance` and `share_percent` update once per batch, not
+per leg.
+
+### SEP-41 token interface
+
+The asset token implements SEP-41 (`transfer`, `transfer_from`, `approve`,
+`allowance`, `balance`, `decimals`, `name`, `symbol`, `total_supply`). Holder
+balances reported here match `balance(id)` on-chain; `decimals` from the same
+interface is what you use to scale `balance` for display.
+
+### Min-holding-period
+
+When the asset is configured with a minimum holding period, a holder's balance
+is locked for `min_holding_period` ledgers after it becomes positive. The
+holders endpoint surfaces this as `lockup_until`; transfers that would move a
+locked balance revert on-chain.
+
+### Admin handover
+
+`propose_admin` / `accept_admin` / `cancel_admin_transfer` change the asset
+admin. Holder balances are unaffected, but admin-gated operations (allowlist
+edits, min-holding-period changes) only take effect after the new admin accepts.
+
+### Dividends: deadline, reclaim, cancel
+
+`set_dividend_deadline`, `reclaim_dividend`, and `cancel_dividend` affect which
+holders can claim a distribution. Reclaimed or cancelled dividends do not change
+holder balances; they only change claim eligibility. Holder balances shown here
+are always the live token balances, independent of dividend state.
