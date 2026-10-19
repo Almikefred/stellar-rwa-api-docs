@@ -29,6 +29,33 @@ pub struct EventsQuery {
 /// memory; the buffer rolls over as new events arrive. A failed RPC cycle
 /// carries the previous event list forward unchanged rather than returning an
 /// empty array.
+///
+/// Worked example (Testnet):
+///
+/// ```text
+/// GET https://api.example.testnet/v1/events?limit=2
+/// ```
+///
+/// ```json
+/// [
+///   {
+///     "id": 128,
+///     "contract": "CBX5SMLTXX6JP4HA5GQIO2V6QM7WCUGL2GZ6D4U773HMRI6RXISKPUR3",
+///     "event_type": "Transfer",
+///     "ledger": 1234567,
+///     "timestamp": "2024-01-01T00:00:00Z",
+///     "data": { "from": "A", "to": "B", "amount": "10" }
+///   },
+///   {
+///     "id": 127,
+///     "contract": "CAR4XY3CEBQWFOL27JEWFW34KXSIZA7RFKDQMEIV7ZU723RWY37I2SYX",
+///     "event_type": "Transfer",
+///     "ledger": 1234566,
+///     "timestamp": "2024-01-01T00:00:00Z",
+///     "data": { "from": "B", "to": "C", "amount": "5" }
+///   }
+/// ]
+/// ```
 pub async fn list(
     State(state): State<AppState>,
     Query(params): Query<EventsQuery>,
