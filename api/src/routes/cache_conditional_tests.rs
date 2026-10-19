@@ -120,3 +120,20 @@ async fn non_data_routes_are_not_cached() {
     assert_eq!(response.status(), StatusCode::OK);
     assert!(response.headers().get(header::ETAG).is_none());
 }
+
+#[tokio::test]
+async fn server_entrypoint_route_sets_etag_and_honours_if_none_match() {
+    // The server entrypoint (`api/src/main.rs`) serves the same router, so the
+    // conditional request contract must hold end-to-end for its routes too.
+    let response = get(app(), "/v1/stats", None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let etag = header_str(&response, header::ETAG);
+    assert_eq!(etag, format!("\"ledger-{LEDGER}\""));
+
+    // A matching If-None-Match must short-circuit to 304 with no body.
+    let revalidated = get(app(), "/v1/stats", Some(&etag)).await;
+    assert_eq!(revalidated.status(), StatusCode::NOT_MODIFIED);
+    assert_eq!(header_str(&revalidated, header::ETAG), etag);
+    let body = to_bytes(revalidated.into_body(), usize::MAX).await.unwrap();
+    assert!(body.is_empty(), "304 must not carry a body");
+}

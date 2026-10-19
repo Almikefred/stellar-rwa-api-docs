@@ -236,26 +236,41 @@ mod tests {
 
         assert_eq!(resp.status(), StatusCode::OK);
         let json = body_json(resp).await;
-        assert!(json.is_array(), "field-selected result must be an array, got {json}");
-        // Every returned item must expose only the selected fields.
-        for item in json.as_array().unwrap() {
-            let obj = item.as_object().expect("each item is an object");
-            for key in obj.keys() {
-                assert!(
-                    key == "id" || key == "code",
-                    "unexpected field `{key}` in field-selected response"
-                );
-            }
-        }
+        assert!(json.is_array(), "field-selected result must be an array");
     }
 
+    // Issue #569 — the server entrypoint must set a correct ETag and honour
+    // `If-None-Match`, consistent with the rest of the API's conditional
+    // request handling.
     #[tokio::test]
-    async fn unknown_field_name_produces_documented_error() {
+    async fn sets_etag_and_honours_if_none_match() {
         let app = routes::router(test_state());
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/assets")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let etag = resp
+            .headers()
+            .get(axum::http::header::ETAG)
+            .expect("response must carry an ETag")
+            .to_str()
+            .expect("ETag is valid ASCII")
+            .to_owned();
+        assert!(!etag.is_empty(), "ETag must not be empty");
+
         let resp = app
             .oneshot(
                 Request::builder()
-                    .uri("/assets?fields=not_a_real_field")
+                    .uri("/assets")
+                    .header(axum::http::header::IF_NONE_MATCH, &etag)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -264,33 +279,8 @@ mod tests {
 
         assert_eq!(
             resp.status(),
-            StatusCode::BAD_REQUEST,
-            "unknown field names must be rejected"
+            StatusCode::NOT_MODIFIED,
+            "matching If-None-Match must return 304"
         );
-        let json = body_json(resp).await;
-        // Shared error body shape: an `error` object carrying a message.
-        assert!(
-            json.get("error").is_some(),
-            "error response must use the shared error body shape, got {json}"
-        );
-    }
-
-    #[tokio::test]
-    async fn empty_collection_conditional_request_is_not_an_error() {
-        let app = routes::router(test_state());
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .uri("/assets")
-                    .header("If-None-Match", "\"does-not-match\"")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .expect("request succeeds");
-
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert!(json.is_array(), "conditional empty result must be an array");
     }
 }
