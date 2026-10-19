@@ -25,6 +25,14 @@ Replace <code>$API_BASE_URL</code> in examples with your configured API base URL
 - **Passphrase** — the network identifier string (e.g. `Test SDF Network ; September 2015`) that distinguishes Testnet from Mainnet. It is not needed for these read-only endpoints.
 </CalloutBox>
 
+<CalloutBox variant="note" title="Related reference pages">
+- <a href="/docs/api/overview">API Overview</a> — base URL, auth, and pagination conventions used by every endpoint.
+- <a href="/docs/api/assets">Assets</a> — the asset registry, including the `decimals` and `total_supply` values used to interpret holder balances and `share_percent`.
+- <a href="/docs/api/compliance">Compliance</a> — the allowlist and KYC records that determine which addresses appear as holders.
+- <a href="/docs/api/transfers">Transfers</a> — the transfer history that produces the balances shown here.
+- <a href="/docs/api/errors">Errors</a> — error envelope and status codes returned by these endpoints.
+</CalloutBox>
+
 <ApiEndpoint method="GET" path="/assets/:id/holders" description="Holder list with balances, sorted by balance descending." />
 
 Returns every address that is on the asset's compliance allowlist **and** holds a
@@ -142,10 +150,10 @@ curl -s "$API_BASE_URL/v1/assets/1/holders?limit=1"
 Returns `404` with `{ "error": "not_found", … }` when the asset id is unknown. An
 asset with holders but none currently holding a positive balance returns an empty
 array `[]` (or `{ "data": [], "next_cursor": null, "has_more": false }` when
-paginated).
+paginated). See <a href="/docs/api/errors">Errors</a> for the full error envelope.
 
 <CalloutBox variant="tip" title="Balance conversion example">
-Holder balances are raw integers on-chain. To format a balance for end users, query the asset's `decimals` value and scale the integer:
+Holder balances are raw integers on-chain. To format a balance for end users, query the asset's `decimals` value (see <a href="/docs/api/assets">Assets</a>) and scale the integer:
 
 ```typescript
 // Given holder.balance = "1000000" and asset.decimals = 2:
@@ -169,6 +177,10 @@ Returns every asset whose compliance allowlist contains `address`, with the
 **real on-chain KYC status and derived `allowed` flag** for each.  Addresses
 with a zero balance still appear (with `"balance": "0"`) — distinguishable from
 an unknown address, which returns an empty array `[]`.
+
+See <a href="/docs/api/compliance">Compliance</a> for the allowlist and KYC
+record model, and <a href="/docs/api/assets">Assets</a> for the asset metadata
+returned alongside each record.
 
 **Path parameters**
 
@@ -217,41 +229,6 @@ curl $API_BASE_URL/holders/GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BS
 compliance contract's `is_allowed` logic: `status == "Approved"`, record not
 expired at the latest indexed ledger, and jurisdiction not blocked. For
 security-critical pre-transfer checks, call the compliance contract's
-`is_allowed` entry point directly rather than relying solely on this field.
+`is_allowed` entry point directly instead of relying on this cached value. See
+<a href="/docs/api/compliance">Compliance</a> for details.
 </CalloutBox>
-
----
-
-## Contract entry points affecting holders
-
-The holders endpoints above are derived from the asset-token and compliance
-contracts. The following entry points change holder state and are reflected in
-the indexer within one refresh cycle (≈10 s). Use them when you need to reason
-about why a holder appears, disappears, or is locked.
-
-### Batch operations
-
-`batch_transfer`, `batch_mint`, and `batch_burn` accept parallel arrays of
-`(from, to, amount)` / `(to, amount)` / `(from, amount)` and apply them
-atomically. A holder's `balance` and `share_percent` update once per batch, not
-per leg.
-
-### SEP-41 token interface
-
-The asset token implements SEP-41 (`transfer`, `transfer_from`, `approve`,
-`allowance`, `balance`, `decimals`, `name`, `symbol`, `total_supply`). Holder
-balances reported here match `balance(id)` on-chain; `decimals` from the same
-interface is what you use to scale `balance` for display.
-
-### Min-holding-period
-
-When the asset is configured with a minimum holding period, a holder's balance
-is locked for `min_holding_period` ledgers after it becomes positive. The
-holders endpoint surfaces this as `lockup_until`; transfers that would move a
-locked balance revert on-chain.
-
-### Admin handover
-
-`propose_admin` / `accept_admin` / `cancel_ad
-
-/* … truncated 540 chars — edit only what you need near the top … */
