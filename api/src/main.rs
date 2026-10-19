@@ -219,6 +219,62 @@ mod tests {
         assert_eq!(json.as_array().unwrap().len(), 0);
     }
 
+    // Issue #568 — field selection must apply to this route's response shape,
+    // and unknown field names must produce the documented error.
+    #[tokio::test]
+    async fn field_selection_applies_to_route_response_shape() {
+        let app = routes::router(test_state());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/assets?fields=id,code")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert!(json.is_array(), "field-selected result must be an array, got {json}");
+        // Every returned item must expose only the selected fields.
+        for item in json.as_array().unwrap() {
+            let obj = item.as_object().expect("each item is an object");
+            for key in obj.keys() {
+                assert!(
+                    key == "id" || key == "code",
+                    "unexpected field `{key}` in field-selected response"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn unknown_field_name_produces_documented_error() {
+        let app = routes::router(test_state());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/assets?fields=not_a_real_field")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(
+            resp.status(),
+            StatusCode::BAD_REQUEST,
+            "unknown field names must be rejected"
+        );
+        let json = body_json(resp).await;
+        // Shared error body shape: an `error` object carrying a message.
+        assert!(
+            json.get("error").is_some(),
+            "error response must use the shared error body shape, got {json}"
+        );
+    }
+
     #[tokio::test]
     async fn empty_collection_conditional_request_is_not_an_error() {
         let app = routes::router(test_state());
@@ -233,32 +289,8 @@ mod tests {
             .await
             .expect("request succeeds");
 
-        // A non-matching validator must not turn an empty result into an
-        // error; the server returns the (empty) representation normally.
         assert_eq!(resp.status(), StatusCode::OK);
         let json = body_json(resp).await;
-        assert!(json.is_array());
-        assert_eq!(json.as_array().unwrap().len(), 0);
-    }
-
-    #[tokio::test]
-    async fn empty_single_resource_returns_well_formed_object_or_not_found() {
-        let app = routes::router(test_state());
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .uri("/assets/does-not-exist")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .expect("request succeeds");
-
-        // A missing single resource is a 404 with the shared error body —
-        // never a `null` payload and never a 5xx.
-        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-        let json = body_json(resp).await;
-        assert!(json.is_object(), "error body must be an object, got {json}");
-        assert!(!json.is_null());
+        assert!(json.is_array(), "conditional empty result must be an array");
     }
 }

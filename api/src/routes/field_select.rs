@@ -113,3 +113,81 @@ pub async fn field_select(mut req: Request<Body>, next: Next) -> Response {
     head.headers.remove(header::CONTENT_LENGTH);
     Response::from_parts(head, Body::from(body))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{routing::get, Router};
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    /// Minimal stand-in for a data route: returns a fixed JSON array so the
+    /// middleware can be exercised without a database.
+    async fn sample_route() -> Response {
+        let body = json!([
+            {"id": 1, "symbol": "BTC", "name": "Bitcoin"},
+            {"id": 2, "symbol": "ETH", "name": "Ether"}
+        ]);
+        Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap()
+    }
+
+    fn app() -> Router {
+        Router::new()
+            .route("/items", get(sample_route))
+            .layer(axum::middleware::from_fn(field_select))
+    }
+
+    async fn body_json(response: Response) -> Value {
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn selects_requested_fields() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/items?fields=id,symbol")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let value = body_json(response).await;
+        assert_eq!(
+            value,
+            json!([
+                {"id": 1, "symbol": "BTC"},
+                {"id": 2, "symbol": "ETH"}
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn unknown_field_is_rejected() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .uri("/items?fields=id,nope")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let value = body_json(response).await;
+        let message = value
+            .get("error")
+            .and_then(Value::as_str)
+            .or_else(|| value.as_str())
+            .unwrap_or_default();
+        assert!(message.contains("unknown field `nope`"), "got: {message}");
+    }
+}
