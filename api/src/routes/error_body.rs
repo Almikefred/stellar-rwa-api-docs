@@ -164,4 +164,29 @@ mod tests {
         let response = get(&app, "/metrics", "GET").await;
         assert_error_shape(response, StatusCode::UNAUTHORIZED, "unauthorized").await;
     }
+
+    #[tokio::test]
+    async fn stats_rate_limit_boundary_uses_shared_shape() {
+        let app = router(AppState::for_test_empty());
+        // Drive the stats route up to and past the configured rate-limit
+        // boundary. The limiter admits requests until the budget is spent and
+        // then rejects with 429; we keep issuing requests until we observe the
+        // first rejection so the test tracks the configured limit rather than
+        // hard-coding it.
+        let mut limited: Option<Response> = None;
+        for _ in 0..10_000 {
+            let response = get(&app, "/v1/stats", "GET").await;
+            if response.status() == StatusCode::TOO_MANY_REQUESTS {
+                limited = Some(response);
+                break;
+            }
+            assert!(
+                response.status().is_success(),
+                "stats route should succeed before the rate-limit boundary, got {}",
+                response.status()
+            );
+        }
+        let response = limited.expect("stats route should hit the rate-limit boundary");
+        assert_error_shape(response, StatusCode::TOO_MANY_REQUESTS, "too_many_requests").await;
+    }
 }
