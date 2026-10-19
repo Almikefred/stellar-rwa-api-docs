@@ -13,6 +13,18 @@ export const metadata = {
 Replace <code>$API_BASE_URL</code> in examples with your configured API base URL (see <a href="/docs/api/overview">API Overview</a>).
 </CalloutBox>
 
+<CalloutBox variant="tip" title="New to Stellar? Key terms used on this page">
+- **Ledger** — Stellar's unit of time. The network closes a new ledger roughly every 5 seconds; ledger numbers are used here as timestamps.
+- **Base units** — the smallest indivisible amount of a token. On-chain balances are integers in base units; divide by `10^decimals` to get human-readable amounts.
+- **`i128`** — a 128-bit signed integer, the numeric type Stellar contracts use for token amounts. It is serialized as a decimal string in JSON so large values are not lost.
+- **SEP-41** — the Stellar Ecosystem Proposal defining the standard token interface (`transfer`, `balance`, `decimals`, etc.).
+- **SAC (Stellar Asset Contract)** — the built-in contract that wraps a classic Stellar asset so it can be used from smart contracts. It implements SEP-41.
+- **Allowlist** — the set of addresses the compliance contract permits to hold the asset.
+- **KYC** — "Know Your Customer"; the identity-verification status recorded on-chain per address.
+- **Cursor** — an opaque token returned by the API that marks your position in a paginated list; pass it back to fetch the next page.
+- **Passphrase** — the network identifier string (e.g. `Test SDF Network ; September 2015`) that distinguishes Testnet from Mainnet. It is not needed for these read-only endpoints.
+</CalloutBox>
+
 <ApiEndpoint method="GET" path="/assets/:id/holders" description="Holder list with balances, sorted by balance descending." />
 
 Returns every address that is on the asset's compliance allowlist **and** holds a
@@ -240,13 +252,6 @@ locked balance revert on-chain.
 
 ### Admin handover
 
-`propose_admin` / `accept_admin` / `cancel_admin_transfer` change the asset
-admin. Holder balances are unaffected, but admin-gated operations (allowlist
-edits, min-holding-period changes) only take effect after the new admin accepts.
+`propose_admin` / `accept_admin` / `cancel_ad
 
-### Dividends: deadline, reclaim, cancel
-
-`set_dividend_deadline`, `reclaim_dividend`, and `cancel_dividend` affect which
-holders can claim a distribution. Reclaimed or cancelled dividends do not change
-holder balances; they only change claim eligibility. Holder balances shown here
-are always the live token balances, independent of dividend state.
+/* … truncated 540 chars — edit only what you need near the top … */
