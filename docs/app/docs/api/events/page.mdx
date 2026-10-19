@@ -142,6 +142,18 @@ The indexer records one event per state-changing contract entry point. The table
 Batch entry points emit one event per item rather than a single aggregate event. Filter by `event_type` and group by `ledger` to reconstruct a batch.
 </CalloutBox>
 
+## Glossary
+
+New to Stellar or this API? These terms appear throughout the page:
+
+- **Ledger sequence** — a monotonically increasing integer identifying a ledger (a batch of transactions) on the Stellar network. Higher numbers are more recent. See [Time & Ledgers](/docs/time-and-ledgers).
+- **RFC 3339 timestamp** — the standard date/time string format used for `timestamp`, e.g. `2026-07-09T08:43:12.101772791+00:00`.
+- **`i128`** — a 128-bit signed integer. Soroban contracts encode large amounts as `i128`; the API serializes them as decimal strings so no precision is lost in JSON.
+- **Base units** — the smallest indivisible unit of a token. Divide by `10 ** decimals` to get the human-readable amount (e.g. a token with 2 decimals stores `100` base units as `1.00`).
+- **SEP-41** — the Stellar token interface standard that defines `transfer`, `mint`, `burn`, and `approve` entry points.
+- **Entry point** — a callable contract function. Each state-changing entry point emits one event.
+- **Cursor** — an opaque pagination token returned in the `Link` header; replay it verbatim to fetch the next page.
+
 ## What to read next
 
 - [API Overview](/docs/api/overview) — conventions, caching, and the full endpoint list.

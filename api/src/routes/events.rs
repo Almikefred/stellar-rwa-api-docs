@@ -3,6 +3,22 @@
 //! Returns the most recent contract events ingested by the indexer, newest
 //! first. The indexer polls Soroban RPC `getEvents` every 10 seconds and
 //! keeps a bounded in-memory ring buffer of up to 200 events.
+//!
+//! # Glossary
+//!
+//! - **Contract event**: a structured log entry emitted by a Soroban smart
+//!   contract during execution (for example a token `Transfer`). Each event is
+//!   tied to the ledger in which it was emitted.
+//! - **Ledger**: a single, numbered block in the Stellar blockchain. Ledger
+//!   numbers increase monotonically and are used to order events.
+//! - **Soroban RPC**: the JSON-RPC service used to read chain data, including
+//!   `getEvents`, which streams contract events to the indexer.
+//! - **Indexer**: the background worker in this service that polls Soroban RPC
+//!   and caches recent events so they can be served quickly.
+//! - **Ring buffer**: a fixed-size in-memory store that discards the oldest
+//!   entries once it is full. Here it holds at most 200 events.
+//! - **`data`**: the event payload as decoded JSON. Its shape depends on the
+//!   emitting contract; it is not a fixed schema.
 
 use axum::{
     extract::{Query, State},
