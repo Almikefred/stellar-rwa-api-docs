@@ -104,3 +104,25 @@ pub(crate) async fn assert_error_body(response: Response, expected: StatusCode) 
     );
     json
 }
+
+/// Assert `response` is a successful (200) JSON array and return the parsed
+/// array so callers can inspect its contents.
+///
+/// Used by the assets route tests to confirm that an empty result set is
+/// serialized as a well-formed `[]` (not `null`, not an error body).
+pub(crate) async fn assert_json_array(response: Response) -> Vec<serde_json::Value> {
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "expected 200 OK, got {}",
+        response.status()
+    );
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("failed to read response body");
+    let json: serde_json::Value =
+        serde_json::from_slice(&bytes).expect("response body was not valid JSON");
+    json.as_array()
+        .expect("response body was not a JSON array")
+        .clone()
+}

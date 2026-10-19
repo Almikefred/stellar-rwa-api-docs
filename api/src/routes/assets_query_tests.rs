@@ -52,3 +52,27 @@ async fn invalid_parameters_are_rejected() {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{q:?}");
     }
 }
+
+#[tokio::test]
+async fn empty_result_is_well_formed_array() {
+    // No asset matches this filter, so the route must return a well-formed
+    // empty JSON array (not `null`, not an error).
+    let response = list(State(state()), params(&[("asset_type", "equity")])).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let arr = v.as_array().expect("empty result must be a JSON array, not null");
+    assert!(arr.is_empty(), "expected empty array, got {arr:?}");
+}
+
+#[tokio::test]
+async fn empty_snapshot_returns_empty_array() {
+    // With no assets indexed at all, the route still returns `[]`.
+    let empty_state = state_with(Snapshot::default());
+    let response = list(State(empty_state), params(&[])).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let arr = v.as_array().expect("empty result must be a JSON array, not null");
+    assert!(arr.is_empty(), "expected empty array, got {arr:?}");
+}
