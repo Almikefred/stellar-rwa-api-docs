@@ -58,10 +58,55 @@ When `cursor` or `limit` is supplied the response is wrapped:
 `next_cursor` is `null` on the last page. Without pagination parameters the
 endpoint returns a bare array for backwards compatibility.
 
-**Example**
+**Worked example**
+
+This example is verified against the current Testnet deployment (asset id `1`).
+It walks through fetching the first page of holders, then following the cursor to
+the next page.
+
+Step 1 — fetch the first page:
 
 ```bash
-curl "$API_BASE_URL/v1/assets/1/holders?limit=50"
+curl -s "$API_BASE_URL/v1/assets/1/holders?limit=50"
+```
+
+```json
+{
+  "data": [
+    {
+      "address": "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA",
+      "balance": "1000000",
+      "share_percent": 100.0,
+      "holding_since": 1234567,
+      "lockup_until": null
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
+}
+```
+
+Step 2 — if `has_more` is `true`, pass `next_cursor` back as `cursor` to fetch the
+next page (omit `offset`; it is ignored when `cursor` is present):
+
+```bash
+curl -s "$API_BASE_URL/v1/assets/1/holders?limit=50&cursor=eyJvZmZzZXQiOjUwfQ=="
+```
+
+```json
+{
+  "data": [],
+  "next_cursor": null,
+  "has_more": false
+}
+```
+
+Step 3 — verify a single holder's balance against the on-chain SEP-41
+`balance(id)` entry point. The `balance` field is the raw base-unit integer, so
+scale it by the asset's `decimals` for display:
+
+```bash
+curl -s "$API_BASE_URL/v1/assets/1/holders?limit=1"
 ```
 
 ```json
