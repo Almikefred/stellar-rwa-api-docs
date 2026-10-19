@@ -19,6 +19,18 @@
 //!   entries once it is full. Here it holds at most 200 events.
 //! - **`data`**: the event payload as decoded JSON. Its shape depends on the
 //!   emitting contract; it is not a fixed schema.
+//!
+//! # Related reference pages
+//!
+//! The docs page for this endpoint (`docs/app/docs/api/events/page.mdx`)
+//! cross-links to the pages covering the concepts above so readers do not have
+//! to search:
+//!
+//! - Contract events: `docs/app/docs/concepts/events/page.mdx`
+//! - Ledgers: `docs/app/docs/concepts/ledgers/page.mdx`
+//! - Soroban RPC: `docs/app/docs/reference/soroban-rpc/page.mdx`
+//! - Indexer: `docs/app/docs/concepts/indexer/page.mdx`
+//! - Event `data` shape: `docs/app/docs/reference/event-data/page.mdx`
 
 use axum::{
     extract::{Query, State},
