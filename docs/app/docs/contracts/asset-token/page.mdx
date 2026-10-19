@@ -5,6 +5,19 @@ The Asset Token contract is a SEP-41 compliant token that represents tokenized r
 - **Contract Address (Testnet):** `CBMCWLSQSWUTLUJFCNBHNBSXMUM3XU7NAQ5TSNERW4HA4ZZBYHLG4ECZ`
 - **Standard:** SEP-41 (Token Interface)
 
+## Glossary
+
+New to Stellar? These terms appear throughout this page.
+
+- **SEP-41** — the Stellar Ecosystem Proposal that defines the standard fungible token interface (the `allowance`, `approve`, `balance`, `transfer`, `burn`, `decimals`, `name`, and `symbol` functions). Implementing it makes the token interoperable with wallets, DEXs, and other SEP-41 consumers.
+- **SAC (Stellar Asset Contract)** — the built-in contract that wraps a classic Stellar asset so it can be used from Soroban smart contracts. This asset token is a custom SEP-41 contract, not a SAC, but it follows the same token interface.
+- **Ledger** — a single entry in the Stellar blockchain. Ledgers close roughly every 5 seconds, so a duration expressed "in ledgers" is a count of blocks, not seconds. `expiration_ledger` and holding periods are measured this way.
+- **TTL (time to live)** — how long a piece of contract storage stays valid, measured in ledgers. When storage TTL expires the entry can be archived and must be restored before use. Allowances here use an explicit `expiration_ledger` rather than an implicit TTL.
+- **Footprint** — the set of ledger entries (contract data, account balances, etc.) that a transaction reads and writes. Soroban requires the footprint to be declared up front so the network can schedule and price the transaction.
+- **ScVal** — Soroban's canonical value encoding (the `ScVal` type in the Rust SDK). Every argument and return value passed to a contract is serialized as an `ScVal`; the CLI handles this conversion for you.
+- **Passphrase** — the network identifier string (e.g. `Test SDF Network ; September 2015` for Testnet) that distinguishes one Stellar network from another. The CLI's `--network testnet` flag selects the matching passphrase and RPC endpoint.
+- **Compliance check** — a contract-level policy evaluated on every transfer, mint, and burn. If it rejects a party, the call fails with `ComplianceCheckFailed (4)`.
+
 ## SEP-41 Token Interface
 
 The contract implements the full SEP-41 token interface, so it is interoperable with wallets, DEXs, and other SEP-41 consumers.
@@ -25,7 +38,7 @@ Returns the amount `spender` is allowed to transfer on behalf of `from`.
 fn approve(env: Env, from: Address, spender: Address, amount: i128, expiration_ledger: u32)
 ```
 
-Sets the allowance for `spender` to `amount`, valid until `expiration_ledger`.
+Sets the allowance for `spender` to `amount`, valid until `expiration_ledger` (a ledger sequence number — see the glossary).
 
 - **Auth:** `from`
 - **Errors:** `InsufficientAllowance (2)`
@@ -193,7 +206,7 @@ Mints `amount` to `to`. Only the admin may mint.
 fn set_min_holding_period(env: Env, period: u64)
 ```
 
-Sets the minimum holding period (in ledgers) that a holder must retain tokens before transferring. Only the admin may update it.
+Sets the minimum holding period (in ledgers — see the glossary) that a holder must retain tokens before transferring. Only the admin may update it.
 
 - **Auth:** `admin`
 - **Errors:** `Unauthorized (3)`
@@ -272,7 +285,8 @@ This example runs against the live Testnet deployment at
 `CBMCWLSQSWUTLUJFCNBHNBSXMUM3XU7NAQ5TSNERW4HA4ZZBYHLG4ECZ`. It uses the
 [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/stellar-cli)
 and a funded Testnet identity. Replace `alice` / `bob` with your own identities
-(`stellar keys generate alice --network testnet --fund`).
+(`stellar keys generate alice --network testnet --fund`). The `--network testnet`
+flag selects the Testnet passphrase and RPC endpoint for you (see the glossary).
 
 ### 1. Read the token metadata
 
@@ -348,26 +362,4 @@ stellar contract invoke --id $CONTRACT --network testnet \
   batch_transfer \
   --from $ALICE \
   --transfers "[['$BOB', 10], ['$CAROL', 20]]"
-```
-
-### 6. Inspect holders
-
-```bash
-stellar contract invoke --id $CONTRACT --network testnet -- \
-  get_holders --start 0 --limit 10
-```
-
-### Rust (Soroban SDK) equivalent
-
-When calling from a contract or test, the same flow looks like this:
-
-```rust
-// Approve a spender for 100 units
-token.approve(&from, &spender, &100, &(env.ledger().sequence() + 1000));
-
-// Transfer 50 units from `from` to `to`
-token.transfer(&from, &to, &50);
-
-// Batch transfer to multiple recipients
-token.batch_transfer(&from, &vec![&env, (to_a, 10), (to_b, 20)]);
 ```
