@@ -266,9 +266,100 @@ Returns a page of token holders starting at `start`, up to `limit` entries. Use 
 | 5 | `DividendDeadlineNotReached` | Dividend deadline has not passed yet |
 | 6 | `DividendNotFound` | Referenced dividend does not exist |
 
-## Example
+## Worked Example (Testnet)
 
-Transfer tokens between two compliant addresses:
+This example runs against the live Testnet deployment at
+`CBMCWLSQSWUTLUJFCNBHNBSXMUM3XU7NAQ5TSNERW4HA4ZZBYHLG4ECZ`. It uses the
+[Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/stellar-cli)
+and a funded Testnet identity. Replace `alice` / `bob` with your own identities
+(`stellar keys generate alice --network testnet --fund`).
+
+### 1. Read the token metadata
+
+```bash
+CONTRACT=CBMCWLSQSWUTLUJFCNBHNBSXMUM3XU7NAQ5TSNERW4HA4ZZBYHLG4ECZ
+
+stellar contract invoke --id $CONTRACT --network testnet -- \
+  name
+stellar contract invoke --id $CONTRACT --network testnet -- \
+  symbol
+stellar contract invoke --id $CONTRACT --network testnet -- \
+  decimals
+```
+
+### 2. Check a balance
+
+```bash
+ALICE=$(stellar keys address alice)
+
+stellar contract invoke --id $CONTRACT --network testnet -- \
+  balance --id $ALICE
+```
+
+### 3. Approve a spender
+
+Approve `bob` to spend 100 units on behalf of `alice`. The allowance expires
+1,000 ledgers from the current sequence number.
+
+```bash
+BOB=$(stellar keys address bob)
+EXPIRATION=$(( $(stellar ledger latest --network testnet | jq -r '.sequence') + 1000 ))
+
+stellar contract invoke --id $CONTRACT --network testnet \
+  --source alice -- \
+  approve \
+  --from $ALICE \
+  --spender $BOB \
+  --amount 100 \
+  --expiration_ledger $EXPIRATION
+```
+
+Verify the allowance was recorded:
+
+```bash
+stellar contract invoke --id $CONTRACT --network testnet -- \
+  allowance --from $ALICE --spender $BOB
+```
+
+### 4. Transfer tokens
+
+Both `alice` and `bob` must pass the contract's compliance check, otherwise the
+call fails with `ComplianceCheckFailed (4)`.
+
+```bash
+stellar contract invoke --id $CONTRACT --network testnet \
+  --source alice -- \
+  transfer \
+  --from $ALICE \
+  --to $BOB \
+  --amount 50
+```
+
+### 5. Batch transfer
+
+Move tokens to several recipients in one transaction. The whole call reverts if
+any individual transfer fails.
+
+```bash
+CAROL=$(stellar keys address carol)
+
+stellar contract invoke --id $CONTRACT --network testnet \
+  --source alice -- \
+  batch_transfer \
+  --from $ALICE \
+  --transfers "[['$BOB', 10], ['$CAROL', 20]]"
+```
+
+### 6. Inspect holders
+
+```bash
+stellar contract invoke --id $CONTRACT --network testnet -- \
+  get_holders --start 0 --limit 10
+```
+
+### Rust (Soroban SDK) equivalent
+
+When calling from a contract or test, the same flow looks like this:
 
 ```rust
 // Approve a spender for 100 units
