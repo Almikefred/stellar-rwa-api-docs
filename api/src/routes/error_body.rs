@@ -159,6 +159,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn assets_malformed_query_uses_shared_shape() {
+        let app = router(AppState::for_test_empty());
+        // Malformed and out-of-range query parameters must be rejected with a
+        // clear 4xx (never a 500 or panic) and rendered in the shared error
+        // body shape. Each case exercises a different validation path on the
+        // assets route.
+        let cases = [
+            "/v1/assets?limit=abc",
+            "/v1/assets?limit=-1",
+            "/v1/assets?limit=0",
+            "/v1/assets?limit=999999999999999999999",
+            "/v1/assets?offset=notanumber",
+            "/v1/assets?offset=-5",
+            "/v1/assets?limit=abc&offset=xyz",
+        ];
+        for uri in cases {
+            let response = get(&app, uri, "GET").await;
+            let status = response.status();
+            assert!(
+                status.is_client_error(),
+                "{uri} should return a 4xx, got {status}"
+            );
+            assert_error_shape(response, status, "invalid_parameter").await;
+        }
+    }
+
+    #[tokio::test]
     async fn metrics_auth_failure_uses_shared_shape() {
         let app = router(AppState::for_test_empty());
         let response = get(&app, "/metrics", "GET").await;

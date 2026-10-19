@@ -2,7 +2,11 @@
 //! with a fixed [`Snapshot`] so handlers can be called directly, without
 //! running the indexer or its background poll loop.
 
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use axum::response::Response;
 use metrics_exporter_prometheus::PrometheusBuilder;
+use tower::ServiceExt;
 
 use crate::indexer::{AppState, Config, Snapshot};
 use crate::models::{Asset, Distribution};
@@ -57,4 +61,46 @@ pub(crate) fn distribution(id: u64, created_at_ledger: u32) -> Distribution {
         completed: false,
         created_at_ledger,
     }
+}
+
+/// Send a single request through `router` and return the raw [`Response`].
+///
+/// Kept generic over the router so route tests can drive the full stack
+/// (extractors, middleware, error mapping) instead of calling handlers
+/// directly.
+pub(crate) async fn send(router: axum::Router, request: Request<Body>) -> Response {
+    router.oneshot(request).await.expect("router call failed")
+}
+
+/// Assert `response` carries the shared error body shape and return the
+/// parsed JSON so callers can inspect the message.
+///
+/// The shared error body is `{ "error": { "code": <string>, "message": <string> } }`
+/// (see `error_body.rs`). This helper fails the test if the shape is wrong,
+/// which is what guards against a malformed query turning into a 500 or panic.
+pub(crate) async fn assert_error_body(response: Response, expected: StatusCode) -> serde_json::Value {
+    assert_eq!(
+        response.status(),
+        expected,
+        "expected {expected}, got {}",
+        response.status()
+    );
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("failed to read response body");
+    let json: serde_json::Value =
+        serde_json::from_slice(&bytes).expect("error body was not valid JSON");
+    let error = json
+        .get("error")
+        .and_then(|e| e.as_object())
+        .expect("error body missing `error` object");
+    assert!(
+        error.get("code").and_then(|c| c.as_str()).is_some(),
+        "error body missing string `code`"
+    );
+    assert!(
+        error.get("message").and_then(|m| m.as_str()).is_some(),
+        "error body missing string `message`"
+    );
+    json
 }
