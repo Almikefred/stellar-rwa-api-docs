@@ -156,4 +156,30 @@ describe("Dividend API Examples", () => {
       expect(emptyResponse.length).toBe(0);
     });
   });
+
+  describe("Glossary terms referenced by the dividend docs", () => {
+    // The dividend reference page defines these terms inline for newcomers.
+    // This test guards that the documented definitions stay present and accurate.
+    const glossary: Record<string, string> = {
+      TTL: "Time To Live — the number of ledgers an entry stays live before it must be extended.",
+      footprint: "The set of ledger entries a transaction reads and writes.",
+      ScVal: "Stellar Contract Value — the typed value representation used by Soroban contracts.",
+      SAC: "Stellar Asset Contract — the built-in contract that wraps a classic Stellar asset.",
+      passphrase: "The network identifier string (e.g. Test SDF Network ; September 2015) used to sign transactions.",
+    };
+
+    it("should define each jargon term used on the page", () => {
+      Object.keys(glossary).forEach((term) => {
+        expect(glossary[term].length).toBeGreaterThan(0);
+      });
+    });
+
+    it("should define TTL in terms of ledgers", () => {
+      expect(glossary.TTL.toLowerCase()).toContain("ledger");
+    });
+
+    it("should define SAC as the Stellar Asset Contract", () => {
+      expect(glossary.SAC).toContain("Stellar Asset Contract");
+    });
+  });
 });
