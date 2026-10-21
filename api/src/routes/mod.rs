@@ -69,6 +69,7 @@ mod cors_headers_tests;
 
 #[cfg(test)]
 mod rate_limit_boundary_tests;
+mod error_body_tests;
 
 pub(crate) mod error_body;
 
