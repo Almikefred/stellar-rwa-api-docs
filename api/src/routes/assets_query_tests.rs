@@ -2,9 +2,10 @@
 
 use std::collections::HashMap;
 
-use axum::{extract::{Query, State}, http::StatusCode, response::IntoResponse};
+use axum::{extract::{Query, State}, http::StatusCode, middleware, response::IntoResponse, routing::get, Router};
 
 use super::assets_query::list;
+use super::field_select::field_select;
 use super::test_support::{asset, state_with};
 use crate::indexer::Snapshot;
 
@@ -36,6 +37,51 @@ async fn sorts_by_valuation_and_filters_by_type() {
     assert_eq!(ids(&[("sort", "valuation")]).await, vec![2, 3, 1]);
     assert_eq!(ids(&[("sort", "valuation"), ("order", "asc")]).await, vec![1, 3, 2]);
     assert_eq!(ids(&[("asset_type", "bond")]).await, vec![2]);
+}
+
+#[tokio::test]
+async fn field_selection_applies_to_list() {
+    let app = Router::new()
+        .route("/assets", get(list))
+        .layer(middleware::from_fn(field_select))
+        .with_state(state());
+
+    let response = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/assets?fields=id,symbol")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let arr = v.as_array().unwrap();
+    assert_eq!(arr.len(), 3);
+    for item in arr {
+        let obj = item.as_object().unwrap();
+        let mut keys: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, vec!["id", "symbol"]);
+    }
+
+    let response = app
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/assets?fields=id,nope")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["error"], "invalid_parameter");
+    assert!(v["message"].as_str().unwrap().contains("nope"));
 }
 
 #[tokio::test]
