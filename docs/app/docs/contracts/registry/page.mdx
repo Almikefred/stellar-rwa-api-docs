@@ -196,11 +196,24 @@ const op = registry.call(
 - **The registry is an index, not a source of truth for balances.** Supply and
   balances live in the asset-token contract; the registry's `valuation` is the
   issuer-declared figure at registration (updatable on the token via
-  `update_valuation`, not mirrored here automatically).
+  `update_valuation`, not mirrored here automatically). See the
+  [Asset Token Contract](/docs/contracts/asset-token) for supply, balances and
+  valuation updates.
 - **Anyone can register** an asset (auth is the issuer, not the admin). Consumers
   should treat listing in the registry as *self-attestation*, and rely on the
-  compliance contract for the actual holding restrictions.
+  compliance contract for the actual holding restrictions. See the
+  [Compliance Contract](/docs/contracts/compliance) for holding restrictions and
+  the [Compliance Guide](/docs/guides/compliance) for the end-to-end flow.
 - **Deactivation is admin-only** and only affects TVL and listing, not the token.
+  See [`deactivate_asset`](#deactivate_asset) above.
+
+## Related reference pages
+
+- [Asset Token Contract](/docs/contracts/asset-token) — the token contract each registry entry points to; source of supply, balances and `update_valuation`.
+- [Compliance Contract](/docs/contracts/compliance) — holding restrictions that listing in the registry does not enforce.
+- [API · Assets](/docs/api/assets) — the REST endpoint backed by `get_all_assets`.
+- [Getting Started](/docs/getting-started) — deployed registry contract address and quickstart.
+- [Architecture Overview](/docs/architecture) — how the registry fits into the four-contract platform.
 
 ## What to read next
 
