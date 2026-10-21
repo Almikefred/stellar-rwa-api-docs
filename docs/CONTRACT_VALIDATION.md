@@ -2,6 +2,16 @@
 
 This documentation includes a contract specification and validation system to ensure that documented contract methods stay in sync with the actual deployed contracts.
 
+## Glossary
+
+New to Stellar/Soroban? These terms appear throughout the contract reference:
+
+- **TTL (time to live):** The number of ledgers a piece of contract storage (or a contract instance) remains valid before it must be extended. Soroban storage entries expire if their TTL is not bumped.
+- **Footprint:** The set of ledger entries (contract data, contract code, accounts) that a transaction reads and/or writes. The footprint must be declared up front so the network can schedule and validate the transaction.
+- **ScVal:** Soroban's canonical value type (`ScVal`) used to encode arguments and return values crossing the host/contract boundary (e.g. `ScVal::I128`, `ScVal::Address`).
+- **SAC (Stellar Asset Contract):** The built-in contract that wraps a classic Stellar asset, exposing it to Soroban with a standard token interface (`transfer`, `balance`, etc.).
+- **Passphrase:** The network identifier string that distinguishes networks (e.g. Testnet vs. Mainnet). Transactions signed for one passphrase are invalid on another.
+
 ## How it works
 
 1. **Contract specifications** are defined in `lib/contracts.ts` with all method signatures, parameters, auth requirements, and error codes.
