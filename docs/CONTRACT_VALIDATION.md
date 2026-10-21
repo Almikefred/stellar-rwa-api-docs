@@ -57,6 +57,42 @@ Description of what the method does...
 
 Run `npm test` to verify they match.
 
+## Worked example: verifying the Registry reference against Testnet
+
+The Registry contract reference page (`docs/app/docs/contracts/registry/page.mdx`) must ship a runnable worked example that is verified against the current Testnet deployment, not left as prose. Use the following procedure whenever the Registry surface changes.
+
+### 1. Confirm the deployed address
+
+The Registry is deployed on **Testnet** at:
+
+```
+CBX5SMLTXX6JP4HA5GQIO2V6QM7WCUGL2GZ6D4U773HMRI6RXISKPUR3
+```
+
+This address is asserted by the validation suite (see `__tests__/contracts.test.ts`), so a mismatch fails `npm test` before the docs can drift.
+
+### 2. Run the example against Testnet
+
+The worked example on the Registry page uses the Stellar CLI to invoke the live contract. Run it end-to-end and confirm the output matches what the page documents:
+
+```bash
+stellar contract invoke \
+  --id CBX5SMLTXX6JP4HA5GQIO2V6QM7WCUGL2GZ6D4U773HMRI6RXISKPUR3 \
+  --network testnet \
+  -- \
+  get_asset_count
+```
+
+Expected: the command returns the current number of registered assets as an integer. If the method name, argument list, or return shape differs from the page, update the page (and `lib/contracts.ts`) together.
+
+### 3. Keep the example in sync
+
+- The example must call methods that exist in `REGISTRY_CONTRACT.methods` in `lib/contracts.ts`.
+- Any auth requirements shown in the example must match the `auth` field in the spec.
+- Any error codes referenced must match the `errors` field in the spec.
+
+Run `npm test` after editing to confirm the page and the spec still agree.
+
 ## Contracts
 
 - **Asset Token**: `CBMCWLSQSWUTLUJFCNBHNBSXMUM3XU7NAQ5TSNERW4HA4ZZBYHLG4ECZ`
