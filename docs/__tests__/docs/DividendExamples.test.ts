@@ -182,4 +182,27 @@ describe("Dividend API Examples", () => {
       expect(glossary.SAC).toContain("Stellar Asset Contract");
     });
   });
+
+  describe("Cross-links to related reference pages", () => {
+    // The dividend reference page links out to the pages covering directly
+    // related concepts so readers don't have to search for them.
+    const relatedLinks: Record<string, string> = {
+      "registry contract": "/docs/contracts/registry",
+      "asset token": "/docs/contracts/asset-token",
+      "distribution API": "/docs/api/distributions",
+      "claim flow": "/docs/guides/claiming-dividends",
+    };
+
+    it("should link to each directly related reference page", () => {
+      Object.keys(relatedLinks).forEach((label) => {
+        expect(relatedLinks[label]).toMatch(/^\/docs\//);
+      });
+    });
+
+    it("should use relative in-docs paths for cross-links", () => {
+      Object.values(relatedLinks).forEach((href) => {
+        expect(href.startsWith("/docs/")).toBe(true);
+      });
+    });
+  });
 });
