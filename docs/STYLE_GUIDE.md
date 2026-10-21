@@ -10,6 +10,22 @@
 - Use the exact names of endpoints, fields and error codes as they appear in the API.
 - Spell out an acronym on first use per page.
 
+### Jargon and domain terms
+
+Readers new to Stellar and Soroban should not have to leave the page to understand
+it. For any term that is specific to the platform or protocol, either define it
+inline on first use or link to a glossary entry.
+
+- **Define inline** when the term appears once or twice on a page: give a short
+  parenthetical or a following sentence (e.g. "the ledger entry's TTL (time to
+  live — how many ledgers remain before it is archived)").
+- **Link to a glossary** when the term recurs across many pages; link the first
+  occurrence per page and use the bare term afterwards.
+- **Never assume** the reader knows protocol jargon. Terms that must always be
+define or linked include, but are not limited to: TTL, footprint, ScVal, SAC,
+  passphrase, ledger, XDR, sequence number, and network passphrase.
+- Keep definitions short and factual; do not turn a definition into a tutorial.
+
 ## Headings
 
 ### Capitalisation convention: sentence case
