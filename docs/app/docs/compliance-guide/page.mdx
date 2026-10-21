@@ -15,6 +15,38 @@ controlling **who is allowed to hold it**. This guide explains the compliance
 model end to end: why it exists, how the allowlist works, how the on-chain
 transfer gate is enforced, and how issuers should operate it.
 
+## Glossary
+
+New to Stellar or to this platform? These terms recur throughout the guide.
+
+- **RWA (real-world asset)** — a token that represents an off-chain asset such as
+  equity, an invoice, or a commodity.
+- **KYC / AML** — *Know Your Customer* / *Anti-Money Laundering*: the identity and
+  screening checks a regulated issuer must run before letting someone hold an asset.
+- **Allowlist** — the set of addresses the issuer has approved to hold the asset.
+- **Ledger** — a single Stellar ledger close (roughly 5 seconds). Ledger numbers are
+  used here as timestamps: `verified_at` and `expires_at` are ledger numbers, not
+  wall-clock times.
+- **TTL (time-to-live)** — how many ledgers a piece of on-chain storage stays alive
+  before it must be extended. Soroban storage entries (including `KycRecord`s) have
+  a TTL; if it lapses the entry is archived and must be restored before use.
+- **Footprint** — the set of ledger entries a Soroban transaction reads and writes.
+  The footprint must be declared up front so the network can validate the
+  transaction; a cross-contract call like `is_allowed` adds the compliance
+  contract's entries to the footprint.
+- **ScVal** — Soroban's canonical value type (the XDR encoding used for contract
+  arguments and return values). Addresses, integers, and structs are all passed as
+  `ScVal`s under the hood.
+- **SAC (Stellar Asset Contract)** — the built-in contract that wraps a classic
+  Stellar asset so it can be used from Soroban. This platform's asset token is a
+  custom contract, not a SAC, but both expose a similar `transfer` surface.
+- **Passphrase** — the network identifier string (e.g. `Test SDF Network ; September
+  2015` for testnet, `Public Global Stellar Network ; September 2015` for mainnet)
+  that scopes signatures and transactions to one network. Signing with the wrong
+  passphrase produces an invalid transaction.
+- **Cross-contract call** — one contract invoking another during a transaction; here
+  the asset token calls `is_allowed` on the compliance contract.
+
 ## Why compliance matters for RWA
 
 A real-world asset — equity in a building, a trade invoice, a warehouse of copper —
@@ -163,30 +195,6 @@ jurisdiction is a no-op, and so is unblocking one that is not blocked.
 This models a common real-world requirement: a regulatory change, sanction, or
 offering restriction that must apply to a whole country at once. Because the check
 happens inside `is_allowed` at read time, the effect is **instantaneous and
-retroactive** — there is no list to re-scan and no window where stale approvals
-still work.
+retroactive** — there is no list to re-scan and no
 
-The API's [`/assets/:id/compliance`](/docs/api/compliance) endpoint surfaces the
-jurisdiction distribution (as counts) so issuers can audit their geographic
-exposure before making such a change.
-
-<CalloutBox variant="warning" title="Known limitation: blocked jurisdictions with no approved address are invisible">
-The API and other clients learn jurisdictions **only from the `jurisdiction` field of
-allowlist KYC records**. The set of blocked jurisdictions is stored separately, as
-per-code flags in the compliance contract. A client that infers "which jurisdictions
-are blocked" from the allowlist will therefore never see a blocked jurisdiction that
-has no address on the allowlist: no record carries its code, so it appears in no
-breakdown. Blocking `KP` before anyone from `KP` is approved, for example, leaves no
-trace in `/assets/:id/compliance`.
-</CalloutBox>
-
-**Why it happens.** Blocking is a property of a country code, not of an address, so
-the contract does not need any record to exist in order to block a code. The API
-indexes per-address records and reports what they contain; it has no record to
-derive an empty jurisdiction from. The gate itself is unaffected: `is_allowed` still
-checks the flag, so an address later approved with that code fails immediately. Only
-*visibility* is limited.
-
-**What to do about it.**
-
-- To ask about a
+/* … truncated 1395 chars — edit only what you need near the top … */
