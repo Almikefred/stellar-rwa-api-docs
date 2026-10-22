@@ -118,6 +118,24 @@ const displayAmount = Number(rawAmount) / (10 ** 2);
 ```
 </CalloutBox>
 
+## Errors
+
+Every error response uses the shared two-field body shape:
+
+```json
+{
+  "error": "invalid_limit",
+  "message": "limit must be between 1 and 100"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `error` | string | Stable, machine-readable error code |
+| `message` | string | Human-readable description of the problem |
+
+See [Errors](/docs/api/errors) for the canonical error shape, the full list of codes, and the HTTP status codes each one maps to.
+
 **Event types by entry point:**
 
 The indexer records one event per state-changing contract entry point. The table below maps the current contract surface to the `event_type` values you will see on this endpoint. See the [Asset Token Contract](/docs/contracts/asset-token) and [Dividends](/docs/contracts/dividends) references for the full entry-point definitions.

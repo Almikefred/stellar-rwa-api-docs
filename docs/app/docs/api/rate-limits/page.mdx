@@ -35,29 +35,27 @@ The limit is shared across API routes, so requests to `/v1/assets` and
 
 ### When the limit is exceeded
 
-A request that arrives when no token is available is rejected with HTTP
-`429 Too Many Requests`. The response body is **plain text**, not the API's JSON
-error shape, and no `X-RateLimit-*` headers are sent. A concrete example at the
-exact limit:
+When a request arrives before a token is available, the API responds with HTTP
+`429 Too Many Requests` using the shared JSON error body (see
+[API · Errors](/docs/api/errors) for the canonical shape):
 
-```
-HTTP/1.1 429 Too Many Requests
-Retry-After: 1
-Content-Type: text/plain; charset=utf-8
-
-Too Many Requests! Wait for 1s
+```json
+{
+  "error": "too_many_requests",
+  "message": "Too Many Requests! Wait for <seconds>s"
+}
 ```
 
-The number of seconds in the body and in `Retry-After` is the time until the next
-token is available, rounded up to whole seconds (so it is at least `1`). With the
+The number of seconds in the message is the time until the next token is
+available, rounded up to whole seconds (so it is at least `1`). With the
 default refill interval of 200 ms, a client that has just exhausted its burst
-typically sees `Retry-After: 1`.
-
-`Retry-After` is exposed to browser clients via `Access-Control-Expose-Headers`
-(see [Browser clients](#browser-clients-exposed-cors-headers)). On `429`, pause
-for at least the indicated number of seconds when present, with a minimum
-one-second delay. Otherwise, use exponential backoff with jitter (and cap the
-delay), and retry only idempotent requests.
+typically sees a 1-second wait. `Retry-After` is sent on `429` and is exposed to
+browser clients via `Access-Control-Expose-Headers` (see
+[Browser clients](#browser-clients-exposed-cors-headers)), but no
+`X-RateLimit-*` headers are sent. On `429`, pause for at least the indicated
+number of seconds when present, with a minimum one-second delay. Otherwise, use
+exponential backoff with jitter (and cap the delay), and retry only idempotent
+requests.
 
 <CalloutBox variant="tip">
 For polling use cases, the indexer refreshes its state about every 10 seconds, so
