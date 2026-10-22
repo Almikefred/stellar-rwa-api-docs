@@ -7,6 +7,41 @@ use super::field_select::field_select;
 use super::test_support::{asset, state_with};
 use crate::indexer::Snapshot;
 
+const LEDGER: u64 = 42;
+const BURST: u32 = 3;
+
+fn app_with_conditional() -> Router {
+    let state = state_with(Snapshot {
+        assets: vec![asset(1), asset(2)],
+        last_indexed_ledger: LEDGER,
+        ..Default::default()
+    });
+    Router::new()
+        .route("/v1/assets", get(super::assets_query::list))
+        .layer(middleware::from_fn(field_select))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            super::cache_conditional::cache_conditional,
+        ))
+        .with_state(state)
+}
+
+fn app_with_rate_limit() -> Router {
+    let state = state_with(Snapshot { assets: vec![asset(1), asset(2)], ..Default::default() });
+    Router::new()
+        .route("/v1/assets", get(super::assets_query::list))
+        .layer(middleware::from_fn(field_select))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            super::rate_limit::rate_limit,
+        ))
+        .with_state(state)
+}
+
+fn connect_info() -> axum::extract::ConnectInfo<std::net::SocketAddr> {
+    axum::extract::ConnectInfo("127.0.0.1:12345".parse().unwrap())
+}
+
 fn app() -> Router {
     let state = state_with(Snapshot { assets: vec![asset(1), asset(2)], ..Default::default() });
     Router::new()
@@ -39,6 +74,79 @@ async fn unknown_field_is_a_clear_error() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "invalid_parameter");
     assert!(body["message"].as_str().unwrap().contains("nope"));
+}
+
+#[tokio::test]
+async fn sets_etag_and_honours_if_none_match() {
+    let response = app_with_conditional()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/assets?fields=id,symbol")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let etag = response
+        .headers()
+        .get(axum::http::header::ETAG)
+        .expect("ETag header must be set")
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(etag, format!("\"ledger-{LEDGER}\""));
+
+    let response = app_with_conditional()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/assets?fields=id,symbol")
+                .header(axum::http::header::IF_NONE_MATCH, &etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert!(bytes.is_empty());
+}
+
+#[tokio::test]
+async fn rate_limit_boundary_uses_shared_error_body() {
+    let router = app_with_rate_limit();
+    for _ in 0..BURST {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/assets?fields=id")
+                    .extension(connect_info())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/v1/assets?fields=id")
+                .extension(connect_info())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: crate::models::ApiErrorBody = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body.error, "too_many_requests");
+    assert!(!body.message.is_empty());
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value.as_object().unwrap().len(), 2);
 }
 
 #[tokio::test]
