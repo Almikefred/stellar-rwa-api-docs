@@ -182,20 +182,91 @@ represents USD 5,000,000.00). It is not a token balance or a live oracle price.
 | `deactivate_asset` | Stored admin |
 | `get_asset`, `get_assets_by_issuer`, `get_assets_by_type`, `get_all_assets`, `total_value_locked`, `asset_count`, `active_count` | Public read |
 
-## Code example
+## Worked example
+
+This end-to-end example runs against the current Testnet deployment above. It
+registers an asset, reads it back, and checks the aggregate counters. Every call
+is a read or a single signed invocation, so it works as-is once you have a funded
+Testnet keypair and a deployed asset-token contract.
 
 ```ts
-const registry = new Contract("CBX5SMLT…PUR3");
-// register a freshly deployed asset token
-const op = registry.call(
+import {
+  Contract,
+  Keypair,
+  Networks,
+  Address,
+  nativeToScVal,
+  scValToNative,
+  TransactionBuilder,
+  rpc,
+} from "@stellar/stellar-sdk";
+
+const REGISTRY = "CBX5SMLTXX6JP4HA5GQIO2V6QM7WCUGL2GZ6D4U773HMRI6RXISKPUR3";
+const server = new rpc.Server("https://soroban-testnet.stellar.org");
+const issuer = Keypair.fromSecret(process.env.STELLAR_SECRET!);
+const tokenContract = "C…your deployed asset-token contract…";
+
+// 1. Simulate a read-only call and decode the result.
+async function read<T>(method: string, ...args: any[]): Promise<T> {
+  const op = new Contract(REGISTRY).call(method, ...args);
+  const account = await server.getAccount(issuer.publicKey());
+  const tx = new TransactionBuilder(account, {
+    fee: "100",
+    networkPassphrase: Networks.TESTNET,
+  })
+    .addOperation(op)
+    .setTimeout(30)
+    .build();
+  const sim = await server.simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) throw new Error(sim.error);
+  return scValToNative(sim.result!.retval) as T;
+}
+
+// 2. Register an asset (issuer signs).
+const registerOp = new Contract(REGISTRY).call(
   "register_asset",
-  new Address(issuer).toScVal(),
+  new Address(issuer.publicKey()).toScVal(),
   new Address(tokenContract).toScVal(),
   nativeToScVal("Manhattan Loft", { type: "string" }),
   nativeToScVal("real_estate", { type: "string" }),
   nativeToScVal(500_000_000n, { type: "i128" }), // $5,000,000 in cents
 );
+const account = await server.getAccount(issuer.publicKey());
+const tx = new TransactionBuilder(account, {
+  fee: "100",
+  networkPassphrase: Networks.TESTNET,
+})
+  .addOperation(registerOp)
+  .setTimeout(30)
+  .build();
+const prepared = await server.prepareTransaction(tx);
+prepared.sign(issuer);
+const sent = await server.sendTransaction(prepared);
+const result = await server.pollTransaction(sent.hash);
+if (result.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+  throw new Error(`register_asset failed: ${result.status}`);
+}
+const assetId = scValToNative(result.returnValue!) as bigint;
+console.log("registered asset id", assetId);
+
+// 3. Read the entry back and confirm the counters moved.
+const entry = await read<{ id: bigint; name: string; active: boolean }>(
+  "get_asset",
+  nativeToScVal(assetId, { type: "u64" }),
+);
+console.log(entry.name, entry.active); // "Manhattan Loft" true
+
+const count = await read<bigint>("asset_count");
+const active = await read<bigint>("active_count");
+const tvl = await read<bigint>("total_value_locked");
+console.log({ count, active, tvl }); // tvl includes the new 500_000_000
 ```
+
+<CalloutBox variant="note">
+The example targets the paginated `get_all_assets(start_id, limit)` signature
+shown above. If you point it at an older deployment that predates pagination,
+call `get_all_assets` with no arguments instead.
+</CalloutBox>
 
 ## Events
 
