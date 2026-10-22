@@ -76,6 +76,46 @@ async fn unknown_field_is_a_clear_error() {
     assert!(body["message"].as_str().unwrap().contains("nope"));
 }
 
+async fn call_raw(uri: &str) -> (StatusCode, Option<String>, serde_json::Value) {
+    let response = app().oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap()).await.unwrap();
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    (status, content_type, serde_json::from_slice(&bytes).unwrap())
+}
+
+#[tokio::test]
+async fn malformed_query_parameters_are_clear_client_errors() {
+    let cases = [
+        "/assets?fields=id&limit=abc",
+        "/assets?fields=id&limit=999999",
+        "/assets?fields=id&offset=-1",
+        "/assets?fields=id&active=maybe",
+        "/assets?fields=id&sort=bogus",
+        "/assets?fields=id&bogus=1",
+    ];
+    for uri in cases {
+        let (status, content_type, body) = call_raw(uri).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "unexpected status for {uri}");
+        assert!(
+            content_type.as_deref().is_some_and(|ct| ct.starts_with("application/json")),
+            "expected JSON content type for {uri}, got {content_type:?}"
+        );
+        let parsed: crate::error::ApiErrorBody =
+            serde_json::from_value(body.clone()).unwrap_or_else(|e| panic!("bad error body for {uri}: {e}"));
+        assert_eq!(parsed.error, "invalid_parameter", "unexpected error code for {uri}");
+        assert!(!parsed.message.is_empty(), "empty message for {uri}");
+        let obj = body.as_object().unwrap();
+        let mut keys: Vec<&str> = obj.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["error", "message"], "unexpected body shape for {uri}");
+    }
+}
+
 #[tokio::test]
 async fn sets_etag_and_honours_if_none_match() {
     let response = app_with_conditional()

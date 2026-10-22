@@ -2,7 +2,16 @@
 
 use std::collections::HashMap;
 
-use axum::{extract::{Query, State}, http::StatusCode, middleware, response::IntoResponse, routing::get, Router};
+use axum::{
+    body::Body,
+    extract::{ConnectInfo, Query, State},
+    http::{header, Request, StatusCode},
+    middleware,
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
+use tower::ServiceExt;
 
 use super::assets_query::list;
 use super::field_select::field_select;
@@ -98,6 +107,60 @@ async fn invalid_parameters_are_rejected() {
         let response = list(State(state()), params(&q)).await.into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{q:?}");
     }
+}
+
+fn get(uri: &str, if_none_match: Option<&str>) -> Request<Body> {
+    let mut builder = Request::builder().uri(uri);
+    if let Some(tag) = if_none_match {
+        builder = builder.header(header::IF_NONE_MATCH, tag);
+    }
+    let mut request = builder.body(Body::empty()).unwrap();
+    request
+        .extensions_mut()
+        .insert(ConnectInfo(std::net::SocketAddr::from(([127, 0, 0, 1], 0))));
+    request
+}
+
+#[tokio::test]
+async fn sets_etag_and_honours_if_none_match() {
+    let app = super::router(state());
+
+    let response = app.clone().oneshot(get("/v1/assets", None)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let etag = response
+        .headers()
+        .get(header::ETAG)
+        .expect("ETag header missing")
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        etag.starts_with("ledger-") && etag.ends_with('"'),
+        "unexpected ETag format: {etag}"
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert!(!body.is_empty());
+
+    let response = app
+        .clone()
+        .oneshot(get("/v1/assets", Some(&etag)))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert!(body.is_empty());
+
+    let response = app
+        .oneshot(get("/v1/assets", Some("\"ledger-stale\"")))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get(header::ETAG).unwrap().to_str().unwrap(),
+        etag
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert!(!body.is_empty());
 }
 
 #[tokio::test]
