@@ -121,73 +121,73 @@ mod tests {
     use serde_json::json;
     use tower::ServiceExt;
 
-    /// Minimal stand-in for a data route: returns a fixed JSON array so the
-    /// middleware can be exercised without a database.
-    async fn sample_route() -> Response {
+    /// Minimal stand-in for the assets route response shape: a JSON array of
+    /// asset records. Exercises the same projection path the real route uses.
+    async fn assets() -> Response {
         let body = json!([
-            {"id": 1, "symbol": "BTC", "name": "Bitcoin"},
-            {"id": 2, "symbol": "ETH", "name": "Ether"}
+            {"asset_id": "a1", "name": "Alpha", "supply": 100},
+            {"asset_id": "a2", "name": "Beta", "supply": 200},
         ]);
         Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(serde_json::to_vec(&body).unwrap()))
-            .unwrap()
+            .body(Body::from(serde_json::to_vec(&body).expect("serializes")))
+            .expect("static response is well-formed")
     }
 
     fn app() -> Router {
         Router::new()
-            .route("/items", get(sample_route))
+            .route("/assets", get(assets))
             .layer(axum::middleware::from_fn(field_select))
     }
 
     async fn body_json(response: Response) -> Value {
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
-            .unwrap();
-        serde_json::from_slice(&bytes).unwrap()
+            .expect("body collects");
+        serde_json::from_slice(&bytes).expect("body is json")
     }
 
     #[tokio::test]
-    async fn selects_requested_fields() {
+    async fn assets_route_projects_selected_fields() {
         let response = app()
             .oneshot(
                 Request::builder()
-                    .uri("/items?fields=id,symbol")
+                    .uri("/assets?fields=asset_id,name")
                     .body(Body::empty())
-                    .unwrap(),
+                    .expect("request builds"),
             )
             .await
-            .unwrap();
+            .expect("router responds");
         assert_eq!(response.status(), StatusCode::OK);
         let value = body_json(response).await;
         assert_eq!(
             value,
             json!([
-                {"id": 1, "symbol": "BTC"},
-                {"id": 2, "symbol": "ETH"}
+                {"asset_id": "a1", "name": "Alpha"},
+                {"asset_id": "a2", "name": "Beta"},
             ])
         );
     }
 
     #[tokio::test]
-    async fn unknown_field_is_rejected() {
+    async fn assets_route_unknown_field_is_bad_request() {
         let response = app()
             .oneshot(
                 Request::builder()
-                    .uri("/items?fields=id,nope")
+                    .uri("/assets?fields=asset_id,nope")
                     .body(Body::empty())
-                    .unwrap(),
+                    .expect("request builds"),
             )
             .await
-            .unwrap();
+            .expect("router responds");
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let value = body_json(response).await;
         let message = value
             .get("error")
             .and_then(Value::as_str)
-            .or_else(|| value.as_str())
-            .unwrap_or_default();
+            .expect("error body has message");
         assert!(message.contains("unknown field `nope`"), "got: {message}");
+        assert!(message.contains("asset_id"), "got: {message}");
     }
 }

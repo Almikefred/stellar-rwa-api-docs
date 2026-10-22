@@ -137,3 +137,45 @@ async fn server_entrypoint_route_sets_etag_and_honours_if_none_match() {
     let body = to_bytes(revalidated.into_body(), usize::MAX).await.unwrap();
     assert!(body.is_empty(), "304 must not carry a body");
 }
+
+#[tokio::test]
+async fn compliance_summary_route_sets_cache_control_and_etag() {
+    let response = get(app(), "/v1/assets/1/compliance", None).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        header_str(&response, header::CACHE_CONTROL),
+        format!("public, max-age={}", POLL_INTERVAL.as_secs())
+    );
+    assert_eq!(
+        header_str(&response, header::ETAG),
+        format!("\"ledger-{LEDGER}\"")
+    );
+}
+
+#[tokio::test]
+async fn compliance_summary_if_none_match_returns_304() {
+    let etag = format!("\"ledger-{LEDGER}\"");
+    let response = get(app(), "/v1/assets/1/compliance", Some(&etag)).await;
+
+    assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert!(body.is_empty(), "304 Not Modified must not carry a body");
+}
+
+#[tokio::test]
+async fn compliance_summary_stale_etag_returns_full_response() {
+    let response = get(app(), "/v1/assets/1/compliance", Some("\"ledger-1\"")).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        header_str(&response, header::ETAG),
+        format!("\"ledger-{LEDGER}\"")
+    );
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(
+        json.is_object(),
+        "stale ETag must yield the full compliance summary object"
+    );
+}
