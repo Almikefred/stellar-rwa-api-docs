@@ -16,6 +16,32 @@ total value locked (TVL) across active assets.
 
 **Testnet:** [`CBX5SMLTXX6JP4HA5GQIO2V6QM7WCUGL2GZ6D4U773HMRI6RXISKPUR3`](https://stellar.expert/explorer/testnet/contract/CBX5SMLTXX6JP4HA5GQIO2V6QM7WCUGL2GZ6D4U773HMRI6RXISKPUR3) — all addresses in [Getting Started → Deployed contract addresses](/docs/getting-started#deployed-contract-addresses-testnet)
 
+## Glossary
+
+New to Stellar/Soroban? These terms appear throughout this page:
+
+- **Soroban** — Stellar's smart-contract platform. Contracts are written in Rust
+  and compiled to WebAssembly.
+- **ScVal** — *Soroban Contract Value*, the typed value representation used when
+  calling a contract. JavaScript/TypeScript callers convert native values to
+  `ScVal` with `nativeToScVal` (and back with `scValToNative`).
+- **Address** — A Stellar account (`G…`) or contract (`C…`) identifier. In Soroban
+  it is passed as an `Address` value, not a plain string.
+- **SAC (Stellar Asset Contract)** — The built-in contract that wraps a classic
+  Stellar asset (e.g. USDC) so it can be used from Soroban. Not used directly by
+  the registry, but referenced by asset tokens.
+- **Footprint** — The set of ledger entries a transaction reads and writes. It
+  must be declared up front so the network can validate and price the call;
+  `simulateTransaction` computes it for you.
+- **TTL (time-to-live)** — How many ledgers a stored contract entry (or its code)
+  remains live before it must be extended. Expired entries are archived and must
+  be restored before use.
+- **Passphrase** — The network identifier string (e.g. `Test SDF Network ; September 2015`
+  for testnet, `Public Global Stellar Network ; September 2015` for mainnet) used
+  to sign and submit transactions to the correct network.
+- **TVL (total value locked)** — The summed `valuation` of all *active* assets,
+  in USD cents. See [`total_value_locked`](#total_value_locked--asset_count).
+
 ## Data types
 
 `AssetEntry`:
