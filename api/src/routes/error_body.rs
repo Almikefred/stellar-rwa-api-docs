@@ -159,9 +159,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn assets_malformed_query_uses_shared_shape() {
+        let app = router(AppState::for_test_empty());
+        // Malformed and out-of-range query parameters must be rejected with a
+        // clear 4xx (never a 500 or panic) and rendered in the shared error
+        // body shape. Each case exercises a different validation path on the
+        // assets route.
+        let cases = [
+            "/v1/assets?limit=abc",
+            "/v1/assets?limit=-1",
+            "/v1/assets?limit=0",
+            "/v1/assets?limit=999999999999999999999",
+            "/v1/assets?offset=notanumber",
+            "/v1/assets?offset=-5",
+            "/v1/assets?limit=abc&offset=xyz",
+        ];
+        for uri in cases {
+            let response = get(&app, uri, "GET").await;
+            let status = response.status();
+            assert!(
+                status.is_client_error(),
+                "{uri} should return a 4xx, got {status}"
+            );
+            assert_error_shape(response, status, "invalid_parameter").await;
+        }
+    }
+
+    #[tokio::test]
     async fn metrics_auth_failure_uses_shared_shape() {
         let app = router(AppState::for_test_empty());
         let response = get(&app, "/metrics", "GET").await;
         assert_error_shape(response, StatusCode::UNAUTHORIZED, "unauthorized").await;
+    }
+
+    #[tokio::test]
+    async fn stats_rate_limit_boundary_uses_shared_shape() {
+        let app = router(AppState::for_test_empty());
+        // Drive the stats route up to and past the configured rate-limit
+        // boundary. The limiter admits requests until the budget is spent and
+        // then rejects with 429; we keep issuing requests until we observe the
+        // first rejection so the test tracks the configured limit rather than
+        // hard-coding it.
+        let mut limited: Option<Response> = None;
+        for _ in 0..10_000 {
+            let response = get(&app, "/v1/stats", "GET").await;
+            if response.status() == StatusCode::TOO_MANY_REQUESTS {
+                limited = Some(response);
+                break;
+            }
+            assert!(
+                response.status().is_success(),
+                "stats route should succeed before the rate-limit boundary, got {}",
+                response.status()
+            );
+        }
+        let response = limited.expect("stats route should hit the rate-limit boundary");
+        assert_error_shape(response, StatusCode::TOO_MANY_REQUESTS, "too_many_requests").await;
     }
 }

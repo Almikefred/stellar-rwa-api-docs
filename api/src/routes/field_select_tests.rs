@@ -47,6 +47,7 @@ fn app() -> Router {
     Router::new()
         .route("/assets", get(super::assets_query::list))
         .route("/assets/:id", get(super::assets::detail))
+        .route("/field_select", get(super::field_select::handler))
         .layer(middleware::from_fn(field_select))
         .with_state(state)
 }
@@ -146,4 +147,18 @@ async fn rate_limit_boundary_uses_shared_error_body() {
     assert!(!body.message.is_empty());
     let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(value.as_object().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn empty_result_set_is_a_well_formed_empty_array() {
+    // A query that matches nothing must yield `[]` (not `null`, not an error).
+    let (status, body) = call("/assets?asset_type=does_not_exist").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, serde_json::json!([]));
+
+    // The same empty result with `fields=` set must pass through unchanged,
+    // without tripping the unknown-field validation.
+    let (status, body) = call("/assets?asset_type=does_not_exist&fields=id,symbol").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, serde_json::json!([]));
 }
