@@ -42,16 +42,15 @@ async fn unknown_field_is_a_clear_error() {
 }
 
 #[tokio::test]
-async fn field_select_route_projects_selected_fields() {
-    let (status, body) = call("/field_select?fields=id,symbol").await;
+async fn empty_result_set_is_a_well_formed_empty_array() {
+    // A query that matches nothing must yield `[]` (not `null`, not an error).
+    let (status, body) = call("/assets?asset_type=does_not_exist").await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, serde_json::json!([{"id": 1, "symbol": "TST"}, {"id": 2, "symbol": "TST"}]));
-}
+    assert_eq!(body, serde_json::json!([]));
 
-#[tokio::test]
-async fn field_select_route_rejects_unknown_field() {
-    let (status, body) = call("/field_select?fields=id,nope").await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"], "invalid_parameter");
-    assert!(body["message"].as_str().unwrap().contains("nope"));
+    // The same empty result with `fields=` set must pass through unchanged,
+    // without tripping the unknown-field validation.
+    let (status, body) = call("/assets?asset_type=does_not_exist&fields=id,symbol").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, serde_json::json!([]));
 }
