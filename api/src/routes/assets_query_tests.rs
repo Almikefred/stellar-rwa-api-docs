@@ -7,6 +7,7 @@ use axum::{extract::{Query, State}, http::StatusCode, middleware, response::Into
 use super::assets_query::list;
 use super::field_select::field_select;
 use super::test_support::{asset, state_with};
+use crate::error::ApiErrorBody;
 use crate::indexer::Snapshot;
 
 fn params(pairs: &[(&str, &str)]) -> Query<HashMap<String, String>> {
@@ -97,6 +98,43 @@ async fn invalid_parameters_are_rejected() {
         let response = list(State(state()), params(&q)).await.into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{q:?}");
     }
+}
+
+#[tokio::test]
+async fn malformed_and_out_of_range_parameters_return_shared_error_body() {
+    for q in [
+        vec![("limit", "abc")],
+        vec![("offset", "-1")],
+        vec![("limit", "999999")],
+        vec![("active", "maybe")],
+        vec![("sort", "name")],
+        vec![("order", "up")],
+        vec![("bogus", "1")],
+    ] {
+        let response = list(State(state()), params(&q)).await.into_response();
+        let status = response.status();
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{q:?}");
+        assert!(!status.is_server_error(), "{q:?}");
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let obj = v.as_object().expect("error body must be a JSON object");
+        assert_eq!(obj.len(), 2, "{q:?}: {v}");
+        assert_eq!(obj.get("error").and_then(|e| e.as_str()), Some("invalid_parameter"), "{q:?}");
+
+        let parsed: ApiErrorBody = serde_json::from_slice(&body).unwrap();
+        assert!(!parsed.message.is_empty(), "{q:?}");
+    }
+}
+
+#[tokio::test]
+async fn empty_result_is_well_formed_empty_array() {
+    let response = list(State(state()), params(&[("asset_type", "does-not-exist")])).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let arr = v.as_array().expect("empty result must be a JSON array, not null or an error");
+    assert!(arr.is_empty());
 }
 
 #[tokio::test]
