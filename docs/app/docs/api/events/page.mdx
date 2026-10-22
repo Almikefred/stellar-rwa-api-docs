@@ -34,6 +34,33 @@ curl "$API_BASE_URL/v1/events?limit=20"
 ]
 ```
 
+**Field selection:**
+
+Use the `fields` query parameter to return only the event fields you need. See [Field Selection](/docs/api/field-selection) for the full syntax.
+
+```bash
+curl "$API_BASE_URL/v1/events?limit=20&fields=id,event_type,ledger"
+```
+
+```json
+[
+  {
+    "id": 42,
+    "event_type": "Transfer",
+    "ledger": 3514152
+  }
+]
+```
+
+Requesting a field that does not exist on `Event` returns a `400` error with code `invalid_parameter`:
+
+```json
+{
+  "error": "invalid_parameter",
+  "message": "Unknown field: 'foo'"
+}
+```
+
 </ApiEndpoint>
 
 **Response schema** (`Event`, per event):

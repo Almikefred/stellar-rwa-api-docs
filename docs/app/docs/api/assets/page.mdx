@@ -35,6 +35,34 @@ Results are paginated to keep large collections bounded. Use `offset` and `limit
 curl "$API_BASE_URL/assets?asset_type=real_estate&active=true&offset=0&limit=50"
 ```
 
+### Field selection
+
+Use `fields` to request a sparse fieldset and shrink the response to just the
+attributes you need. Field names are validated against the asset schema; an
+unknown name is rejected with `400` (see [Errors](/docs/api/errors)):
+
+```bash
+curl "$API_BASE_URL/assets?fields=id,symbol,valuation_usd,active"
+```
+
+```json
+[
+  {
+    "id": 1,
+    "symbol": "MLOFT",
+    "valuation_usd": 5000000.0,
+    "active": true
+  }
+]
+```
+
+```json
+{ "error": "invalid_parameter", "message": "unknown field `valuation`" }
+```
+
+Returned with status `400` when any requested field is not part of the asset
+schema. See [Field selection](/docs/api/field-selection) for the full rules.
+
 **Response schema** (per asset):
 
 | Field | Type | Notes |

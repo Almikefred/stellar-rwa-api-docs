@@ -397,8 +397,83 @@ see [API · Errors](/docs/api/errors).
 
 ## CORS
 
-All origins, methods and headers are allowed, so the docs site and the web app
-can call the API directly from the browser.
+The API is designed to be called directly from a browser, so the docs site and
+the web app can fetch it without a proxy. The policy is permissive:
+
+| CORS setting | Value | Notes |
+|---|---|---|
+| `Access-Control-Allow-Origin` | `*` | Any origin may call the API. |
+| `Access-Control-Allow-Methods` | `GET`, `OPTIONS` | Every data route is a `GET`; `OPTIONS` answers preflight requests. |
+| `Access-Control-Allow-Headers` | `*` | Any request header is accepted, including `If-None-Match` and `Authorization`. |
+| `Access-Control-Expose-Headers` | `ETag`, `Cache-Control`, `X-RateLimit-*` | Readable from JavaScript via `response.headers.get(...)`. |
+| `Access-Control-Allow-Credentials` | *not set* | Cookies and other credentials are **not** supported. |
+| `Access-Control-Max-Age` | `86400` | Preflight results may be cached by the browser for 24 hours. |
+
+<CalloutBox variant="warning">
+Because <code>Access-Control-Allow-Credentials</code> is not sent, the browser
+will not attach cookies or HTTP auth credentials to cross-origin requests, and
+<code>fetch(..., {"{"} credentials: "include" {"}"})</code> will fail. The API
+requires no authentication for data routes, so call it without credentials.
+</CalloutBox>
+
+A minimal browser request:
+
+```javascript
+const res = await fetch(`${API_BASE_URL}/v1/stats`, {
+  method: "GET",
+  headers: { Accept: "application/json" },
+  // Do NOT use credentials: "include" — the API does not allow credentials.
+});
+
+if (!res.ok) throw new Error(`API error: ${res.status}`);
+const stats = await res.json();
+console.log(stats.tvl_usd);
+```
+
+## Conditional requests (ETag / If-None-Match)
+
+`/v1` responses carry an `ETag` derived from the indexed snapshot. Send it back
+in `If-None-Match` and the API answers `304 Not Modified` with an empty body
+when nothing has changed, saving bandwidth and JSON parsing. Because the
+snapshot refreshes roughly every 10 seconds, a repeat request within the same
+window will normally return `304`.
+
+A full round-trip with `curl`:
+
+```bash
+# 1. First request — 200 OK with an ETag
+curl -i http://localhost:8080/v1/stats
+```
+
+```http
+HTTP/1.1 200 OK
+content-type: application/json
+cache-control: public, max-age=10
+etag: "a1b2c3d4e5f6"
+
+{"total_assets":1,"active_assets":1,"tvl_cents":"500000000", ...}
+```
+
+```bash
+# 2. Repeat with the ETag — 304 Not Modified, no body
+curl -i http://localhost:8080/v1/stats \
+  -H 'If-None-Match: "a1b2c3d4e5f6"'
+```
+
+```http
+HTTP/1.1 304 Not Modified
+cache-control: public, max-age=10
+etag: "a1b2c3d4e5f6"
+```
+
+The `ETag` value must be sent back **exactly** as received, including the
+surrounding double quotes. Once the indexer picks up a new ledger the `ETag`
+changes and the next conditional request returns `200` with the fresh body.
+
+<CalloutBox variant="tip">
+See <a href="/docs/api/rate-limits">Rate Limits &amp; Caching</a> for the full
+caching model, cache header semantics and polling recommendations.
+</CalloutBox>
 
 ## `/stats` response
 
