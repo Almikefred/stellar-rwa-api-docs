@@ -24,8 +24,38 @@ export const metadata = {
 curl "$API_BASE_URL/v1/assets?asset_type=real_estate&sort=valuation&order=asc"
 ```
 
-Invalid or unknown parameters return `400` with a body of the form
-`{"error": "invalid_parameter", "message": "..."}`.
+Invalid or unknown parameters return `400` with the shared error body:
+
+```json
+{
+  "error": {
+    "code": "bad_request",
+    "message": "unknown query parameter: foo"
+  }
+}
+```
+
+See [API · Error Bodies](/docs/api/errors) for the canonical error shape and the full list of error codes.
+
+## Empty results
+
+When no assets match the supplied filters, `GET /v1/assets` returns `200` with
+an empty JSON array — never `null` and never an error:
+
+```json
+[]
+```
+
+```bash
+curl "$API_BASE_URL/v1/assets?asset_type=real_estate&active=false"
+# 200 OK
+# []
+```
+
+Malformed or out-of-range parameters (for example a non-integer `limit`, an
+unknown `sort` value, or `order` without `sort`) still return `400` with the
+shared error body `{"error": "invalid_parameter", "message": "..."}` — an empty
+result set is only returned for valid parameters that match nothing.
 
 ## Field selection
 
@@ -50,5 +80,5 @@ selectable fields and projection rules.
 
 - [API · Assets](/docs/api/assets) — full response schema and per-asset endpoints.
 - [API · Field Selection](/docs/api/field-selection) — combine `?fields=` with filter parameters.
-- [API · Error Bodies](/docs/api/errors) — details on the `400` error shape.
+- [API · Error Bodies](/docs/api/errors) — canonical error shape and codes for `400` responses.
 - [Rate Limits & Caching](/docs/api/rate-limits) — use ETags to poll filtered lists efficiently.

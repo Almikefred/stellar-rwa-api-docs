@@ -170,7 +170,14 @@ curl "$API_BASE_URL/v1/assets/1?fields=id,name,active,indexed_at_ledger"
 ```
 
 Returned with status `404` when no asset has the given id. A non-numeric id
-(`/assets/abc`) is rejected with `400` by the router.
+(`/assets/abc`) is rejected with status `400`:
+
+```json
+{ "error": "bad_request", "message": "invalid asset id" }
+```
+
+All error responses use the shared body shape `{"error": "<code>", "message": "<text>"}`.
+See [API · Errors](/docs/api/errors) for the canonical shape and the full list of codes.
 
 <CalloutBox variant="tip" title="Amount units and conversions">
 Both `total_supply` and `valuation_cents` are 128-bit integers returned as strings to prevent rounding in JavaScript runtimes.
