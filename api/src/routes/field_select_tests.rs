@@ -12,6 +12,7 @@ fn app() -> Router {
     Router::new()
         .route("/assets", get(super::assets_query::list))
         .route("/assets/:id", get(super::assets::detail))
+        .route("/field_select", get(super::field_select::handler))
         .layer(middleware::from_fn(field_select))
         .with_state(state)
 }
