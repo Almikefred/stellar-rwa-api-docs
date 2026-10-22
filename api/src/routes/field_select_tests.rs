@@ -76,6 +76,23 @@ async fn unknown_field_is_a_clear_error() {
     assert!(body["message"].as_str().unwrap().contains("nope"));
 }
 
+#[tokio::test]
+async fn server_entrypoint_field_selection() {
+    // Field selection applies to the server entrypoint route's response shape.
+    let (status, body) = call("/assets?fields=id,symbol&limit=1").await;
+    assert_eq!(status, StatusCode::OK);
+    let first = &body[0];
+    assert_eq!(first["id"], 1);
+    assert_eq!(first["symbol"], "TST");
+    assert!(first.get("name").is_none());
+
+    // Unknown field names produce the documented error.
+    let (status, body) = call("/assets?fields=id,nope").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "invalid_parameter");
+    assert!(body["message"].as_str().unwrap().contains("nope"));
+}
+
 async fn call_raw(uri: &str) -> (StatusCode, Option<String>, serde_json::Value) {
     let response = app().oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap()).await.unwrap();
     let status = response.status();

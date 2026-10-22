@@ -51,7 +51,7 @@ async fn requests_up_to_the_burst_succeed_and_the_next_is_throttled() {
 }
 
 #[tokio::test]
-async fn throttled_response_has_status_and_a_non_empty_body() {
+async fn throttled_response_uses_the_shared_error_body_shape() {
     let app = router_with_limits(1, 1);
 
     assert_eq!(
@@ -63,6 +63,22 @@ async fn throttled_response_has_status_and_a_non_empty_body() {
     assert_eq!(throttled.status(), StatusCode::TOO_MANY_REQUESTS);
     let body = to_bytes(throttled.into_body(), usize::MAX).await.unwrap();
     assert!(!body.is_empty(), "a throttled response explains itself");
+
+    // The 429 must use the same `{ "error": { "code", "message" } }`
+    // envelope as every other error response, not a bare string.
+    let json: Value = serde_json::from_slice(&body).expect("429 body is JSON");
+    let error = json
+        .get("error")
+        .and_then(Value::as_object)
+        .expect("429 body has an `error` object");
+    assert!(
+        error.get("code").and_then(Value::as_str).is_some(),
+        "error.code is a string"
+    );
+    assert!(
+        error.get("message").and_then(Value::as_str).is_some(),
+        "error.message is a string"
+    );
 }
 
 #[tokio::test]
