@@ -87,7 +87,23 @@ curl "$API_BASE_URL/v1/holders/$ADDRESS/position"
 - `claimable` lists each open distribution with the holder's pro-rata share
   (`balance / total_supply`) of the unclaimed pool, in payment-token base units.
   It is an estimate from indexed data, not an on-chain claim quote.
-- An address with no holdings returns an empty `positions` array.
+- An address with no holdings returns **HTTP 200** with a well-formed body: `asset_count` is `0`, `total_value_usd` is `0`, and `positions` is `[]` — an empty array, never `null` and never an error. Clients can rely on this shape and iterate `positions` without a null check.
+
+## Errors
+
+Error responses use the shared two-field error body (`error` and `message`) defined in `error_body.rs`. See [API · Errors](/docs/api/errors) for the canonical shape and the full list of codes.
+
+| Status | `error` | When |
+|---|---|---|
+| `400` | `bad_request` | The `:address` path segment is not a valid Stellar account address |
+| `429` | `too_many_requests` | The rate limit for this endpoint was exceeded |
+
+```json
+{
+  "error": "bad_request",
+  "message": "invalid Stellar account address"
+}
+```
 
 <CalloutBox variant="tip" title="Position unit conversions">
 Because asset tokens and payment tokens may use different decimal bases, always scale each amount using its corresponding token decimals:
